@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { PlayProfileEditModal } from "../play-profile-edit-modal";
 import { PlayFaceAFaceView } from "../play-face-a-face-view";
+import { AnswerButtons } from "@/components/tv/AnswerButtons";
 
 interface PlayLightClientProps {
   code: string;
@@ -30,16 +31,10 @@ interface PlayLightClientProps {
 
 type Phase = "waiting" | "playing" | "result" | "ended";
 
-const ANSWER_COLORS = [
-  "bg-buzz text-white", // A = rouge
-  "bg-sky text-on-color", // B = bleu
-  "bg-life-green text-on-color", // C = vert
-  "bg-life-yellow text-on-color", // D = jaune
-];
-
 /**
- * UI téléphone : pendant son tour, 4 (ou 2) gros boutons couleurs A/B/C/D
- * occupent l'écran. Hors tour : "X est en train de jouer…" + score/état.
+ * UI téléphone : pendant son tour, des gros boutons A/B (ou A/B/C/D) en
+ * layout horizontal occupent l'écran (Q2.1 — palette navy/or, plus de
+ * rouge/bleu agressif). Hors tour : "X est en train de jouer…" + état.
  *
  * Vibration + flash or au passage du tour. Heartbeat de 12 s pour signaler
  * la connexion. Reconnexion auto si on revient sur la page (via token
@@ -319,30 +314,14 @@ export function PlayLightClient({
       )}
 
       {isMyTurn && question ? (
-        <section className="grid flex-1 grid-cols-1 gap-3">
-          {question.choices.map((c) => {
-            const colorClass =
-              ANSWER_COLORS[c.idx] ?? "bg-foreground/10 text-foreground";
-            return (
-              <motion.button
-                key={c.idx}
-                type="button"
-                onClick={() => handleAnswer(c.idx)}
-                whileTap={{ scale: 0.97 }}
-                className={cn(
-                  "flex w-full items-center justify-center gap-3 rounded-3xl px-6 text-2xl font-extrabold uppercase shadow-lg",
-                  "min-h-[120px] flex-1",
-                  colorClass,
-                )}
-              >
-                <span className="font-display text-3xl">
-                  {String.fromCharCode(65 + c.idx)}
-                </span>
-                {fullMode && <span className="text-base normal-case">{c.text}</span>}
-              </motion.button>
-            );
-          })}
-        </section>
+        <AnswerButtons
+          choices={question.choices}
+          showText={fullMode}
+          enabled={phase === "playing"}
+          onAnswer={handleAnswer}
+          selectedIdx={result?.byToken === token ? result.chosenIdx : null}
+          correctIdx={result?.byToken === token ? result.correctIdx : null}
+        />
       ) : (
         <WaitingTurn question={question} myToken={token} />
       )}

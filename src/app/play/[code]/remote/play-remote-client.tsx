@@ -31,6 +31,7 @@ import type {
 } from "@/lib/realtime/room-events";
 import { cn } from "@/lib/utils";
 import { PlayFaceAFaceView } from "../play-face-a-face-view";
+import { AnswerButtons } from "@/components/tv/AnswerButtons";
 
 interface PlayRemoteClientProps {
   code: string;
@@ -41,13 +42,6 @@ interface PlayRemoteClientProps {
 }
 
 type Phase = "waiting" | "playing" | "result" | "ended";
-
-const ANSWER_COLORS = [
-  "bg-buzz text-white",
-  "bg-sky text-on-color",
-  "bg-life-green text-on-color",
-  "bg-life-yellow text-on-color",
-];
 
 /**
  * P4.1 — Client régie : un seul téléphone joue pour plusieurs joueurs
@@ -398,33 +392,25 @@ export function PlayRemoteClient({
         </section>
       )}
 
-      {/* Boutons A/B/C/D — actifs uniquement si on a une question + un slot courant */}
-      <section className="grid flex-1 grid-cols-1 gap-3">
-        {(question?.choices ?? []).map((c) => {
-          const colorClass =
-            ANSWER_COLORS[c.idx] ?? "bg-foreground/10 text-foreground";
-          return (
-            <motion.button
-              key={c.idx}
-              type="button"
-              onClick={() => handleAnswer(c.idx)}
-              whileTap={{ scale: 0.97 }}
-              disabled={!canAnswer}
-              className={cn(
-                "flex w-full items-center justify-center gap-3 rounded-3xl px-4 text-2xl font-extrabold uppercase shadow-lg transition-opacity",
-                "min-h-[100px] flex-1",
-                colorClass,
-                !canAnswer && "opacity-40",
-              )}
-            >
-              <span className="font-display text-3xl">
-                {String.fromCharCode(65 + c.idx)}
-              </span>
-              <span className="text-sm normal-case">{c.text}</span>
-            </motion.button>
-          );
-        })}
-      </section>
+      {/* Q2.1 — Boutons réponses en layout horizontal, palette navy/or. */}
+      {question && (
+        <AnswerButtons
+          choices={question.choices}
+          showText
+          enabled={canAnswer}
+          onAnswer={handleAnswer}
+          selectedIdx={
+            result && currentSlot && result.byToken === currentSlot.token
+              ? result.chosenIdx
+              : null
+          }
+          correctIdx={
+            result && currentSlot && result.byToken === currentSlot.token
+              ? result.correctIdx
+              : null
+          }
+        />
+      )}
     </main>
   );
 }
