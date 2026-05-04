@@ -10,15 +10,19 @@ import type { RoomEventName, RoomEvents } from "./room-events";
  *
  * Channel naming : `room:{code}` (4 chiffres).
  *
- * **Cache + ref-counting (fix P1 production)** : plusieurs `useEffect`
- * peuvent légitimement vouloir le même channel (presence + broadcast +
- * face-à-face). Pour ne PAS créer plusieurs `RealtimeChannel` sur le même
- * topic (ce qui faisait planter Supabase avec
- * `cannot add 'presence' callbacks ... after subscribe()` dès qu'un 2e
- * useEffect tentait de re-binder presence sur un channel déjà subscribed),
- * on cache un seul channel par roomCode et on incrémente un compteur de
- * références. L'unsubscribe réel n'a lieu que quand le dernier handle
- * disparaît.
+ * **Channel sharing + zombie cleanup** : Supabase JS (v2.104+) déduplique
+ * les channels par topic dans `RealtimeClient.channel()` — si on appelle
+ * `supabase.channel('room:1234')` deux fois, on récupère la MÊME instance
+ * la 2e fois. Combiné avec React StrictMode / HMR (qui re-run les useEffect),
+ * on se retrouve avec :
+ *   1. mount → channel créé + subscribe (state="joined")
+ *   2. cleanup → refCount-- mais cleanup async, channel reste dans Supabase
+ *   3. re-mount → supabase.channel(topic) retourne l'ancien (state="joined")
+ *      → on tente d'y bind des presence callbacks → throw
+ *
+ * Solution : on attache notre meta (refCount + presenceListeners) au channel
+ * via WeakMap. Si on retrouve un channel sans meta dans Supabase, c'est un
+ * orphan/zombie → on le force-remove de la liste interne avant de recréer.
  *
  * **Presence (P1.1)** : la source de vérité "qui est en ligne" est Supabase
  * Realtime Presence (heartbeat WebSocket natif, ~15s timeout). On garde
@@ -66,13 +70,14 @@ export interface TvChannelHandle {
   unsubscribe: () => Promise<"ok" | "timed out" | "error">;
 }
 
-interface CachedChannel {
-  channel: RealtimeChannel;
+interface ChannelMeta {
   presenceListeners: Set<PresenceListener>;
   refCount: number;
 }
 
-const channelCache = new Map<string, CachedChannel>();
+// WeakMap : la meta vit aussi longtemps que le channel. Si Supabase recrée
+// le channel, la meta est automatiquement absente (et on en crée une fresh).
+const channelMeta = new WeakMap<RealtimeChannel, ChannelMeta>();
 
 function cleanPresenceState(
   channel: RealtimeChannel,
@@ -94,25 +99,66 @@ function cleanPresenceState(
   return cleaned;
 }
 
+/**
+ * Force-retire un channel orphan de la liste interne de Supabase.
+ * Sans ça, le prochain `supabase.channel(topic)` retourne le zombie.
+ * On mute directement `getChannels()` qui retourne la référence vivante
+ * du tableau (cf. RealtimeClient source) — pas idéal mais pas d'API publique
+ * pour ça côté Supabase.
+ */
+function forceRemoveZombieChannel(
+  supabase: ReturnType<typeof createClient>,
+  channel: RealtimeChannel,
+): void {
+  const channels = supabase.getChannels();
+  const idx = channels.indexOf(channel);
+  if (idx !== -1) channels.splice(idx, 1);
+  // Best-effort cleanup côté serveur — fire-and-forget.
+  void channel.unsubscribe().catch(() => {
+    // ignore — le channel était peut-être déjà mort
+  });
+}
+
 export function joinTvChannel(roomCode: string): TvChannelHandle {
   const supabase = createClient();
-  let entry = channelCache.get(roomCode);
+  const realtimeTopic = `realtime:room:${roomCode}`;
 
-  if (!entry) {
-    // Première instance : on crée le channel, on enregistre les callbacks
-    // presence (avant subscribe — obligatoire côté Supabase) et on lance
-    // le subscribe.
-    const channel = supabase.channel(`room:${roomCode}`, {
+  // 1. Cherche un channel existant côté Supabase
+  let existing = supabase
+    .getChannels()
+    .find((c) => c.topic === realtimeTopic);
+  let meta = existing ? channelMeta.get(existing) : undefined;
+
+  // 2. Channel orphan (existe mais sans notre meta — typique HMR / StrictMode)
+  //    → force-remove pour pouvoir en créer un fresh
+  if (existing && !meta) {
+    forceRemoveZombieChannel(supabase, existing);
+    existing = undefined;
+  }
+
+  let channel: RealtimeChannel;
+  if (existing && meta) {
+    // 3a. Réutilise le channel existant (multi-mount du même code)
+    channel = existing;
+  } else {
+    // 3b. Crée un nouveau channel + bind les presence callbacks AVANT subscribe
+    channel = supabase.channel(`room:${roomCode}`, {
       config: {
         broadcast: { self: false, ack: false },
         presence: { key: "" },
       },
     });
 
-    const presenceListeners = new Set<PresenceListener>();
+    const newMeta: ChannelMeta = {
+      presenceListeners: new Set(),
+      refCount: 0,
+    };
+    channelMeta.set(channel, newMeta);
+    meta = newMeta;
+
     function emitPresence() {
       const cleaned = cleanPresenceState(channel);
-      for (const l of presenceListeners) l(cleaned);
+      for (const l of newMeta.presenceListeners) l(cleaned);
     }
 
     channel.on("presence", { event: "sync" }, () => emitPresence());
@@ -120,18 +166,16 @@ export function joinTvChannel(roomCode: string): TvChannelHandle {
     channel.on("presence", { event: "leave" }, () => emitPresence());
 
     void channel.subscribe();
-
-    entry = { channel, presenceListeners, refCount: 0 };
-    channelCache.set(roomCode, entry);
   }
 
-  entry.refCount++;
-  const cur = entry;
+  meta.refCount++;
+  const curChannel = channel;
+  const curMeta = meta;
 
   return {
-    channel: cur.channel,
+    channel: curChannel,
     send(event, payload) {
-      void cur.channel.send({
+      void curChannel.send({
         type: "broadcast",
         event,
         payload,
@@ -139,70 +183,61 @@ export function joinTvChannel(roomCode: string): TvChannelHandle {
     },
     on(event, handler) {
       // Broadcast peut être bindé après subscribe — Supabase l'autorise.
-      cur.channel.on("broadcast", { event }, ({ payload }) => {
+      curChannel.on("broadcast", { event }, ({ payload }) => {
         handler(payload as RoomEvents[typeof event]);
       });
     },
     async trackPresence(meta) {
       try {
-        await cur.channel.track(meta);
+        await curChannel.track(meta);
       } catch {
-        // ignore — peut arriver si le channel est en cours de subscribe
+        // ignore — peut arriver si le channel n'est pas encore "joined"
       }
     },
     async untrackPresence() {
       try {
-        await cur.channel.untrack();
+        await curChannel.untrack();
       } catch {
         // ignore
       }
     },
     onPresence(listener) {
-      cur.presenceListeners.add(listener);
+      curMeta.presenceListeners.add(listener);
       // Push immédiat de l'état courant si déjà disponible (utile quand
       // un 2e useEffect s'abonne après que la presence sync ait déjà eu lieu).
       try {
-        const cleaned = cleanPresenceState(cur.channel);
+        const cleaned = cleanPresenceState(curChannel);
         if (Object.keys(cleaned).length > 0) listener(cleaned);
       } catch {
         // channel pas encore subscribed — la sync arrivera bientôt
       }
       return () => {
-        cur.presenceListeners.delete(listener);
+        curMeta.presenceListeners.delete(listener);
       };
     },
     presenceState() {
       try {
-        return cleanPresenceState(cur.channel);
+        return cleanPresenceState(curChannel);
       } catch {
         return {};
       }
     },
     async unsubscribe() {
-      cur.refCount--;
-      if (cur.refCount > 0) {
+      curMeta.refCount--;
+      if (curMeta.refCount > 0) {
         // Il reste d'autres handles actifs sur ce channel — on garde le
         // channel ouvert pour eux.
         return "ok";
       }
       // Dernier handle : on coupe vraiment.
-      channelCache.delete(roomCode);
       try {
-        await cur.channel.untrack();
+        await curChannel.untrack();
       } catch {
         // ignore
       }
-      const status = await cur.channel.unsubscribe();
-      void supabase.removeChannel(cur.channel);
+      const status = await curChannel.unsubscribe();
+      void supabase.removeChannel(curChannel);
       return status;
     },
   };
-}
-
-/**
- * Pour les tests : reset du cache. Ne pas appeler en prod — utilisé
- * uniquement par les tests unitaires.
- */
-export function __resetTvChannelCache(): void {
-  channelCache.clear();
 }
