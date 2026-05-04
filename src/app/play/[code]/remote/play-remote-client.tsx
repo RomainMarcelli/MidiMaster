@@ -32,6 +32,7 @@ import type {
 import { cn } from "@/lib/utils";
 import { PlayFaceAFaceView } from "../play-face-a-face-view";
 import { AnswerButtons } from "@/components/tv/AnswerButtons";
+import { RoomClosedOverlay } from "@/components/tv/RoomClosedOverlay";
 
 interface PlayRemoteClientProps {
   code: string;
@@ -70,6 +71,8 @@ export function PlayRemoteClient({
   // pour les actions présentateur (typique : c'est l'un des 2 finalistes
   // qui est le présentateur, et il commande depuis le téléphone régie).
   const [faMode, setFaMode] = useState(false);
+  // Q3.1 — Overlay quand l'hôte ferme la partie depuis la TV.
+  const [roomClosed, setRoomClosed] = useState(false);
 
   // Charge les slots existants au mount (depuis localStorage)
   useEffect(() => {
@@ -118,6 +121,9 @@ export function PlayRemoteClient({
     });
     ch.on("fa:vote-start", () => {
       setFaMode(true);
+    });
+    ch.on("room:closed", () => {
+      setRoomClosed(true);
     });
     return () => {
       void ch.unsubscribe();
@@ -197,28 +203,34 @@ export function PlayRemoteClient({
   // joue le rôle du présentateur s'il a été élu).
   if (faMode && channelRef.current && slots[0]) {
     return (
-      <PlayFaceAFaceView
-        myToken={slots[0].token}
-        channel={channelRef.current}
-      />
+      <>
+        <PlayFaceAFaceView
+          myToken={slots[0].token}
+          channel={channelRef.current}
+        />
+        <RoomClosedOverlay visible={roomClosed} />
+      </>
     );
   }
 
   if (phase === "ended") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
-        <Trophy
-          className="h-16 w-16 text-gold-warm"
-          aria-hidden="true"
-          fill="currentColor"
-        />
-        <h1 className="font-display text-3xl font-extrabold text-foreground">
-          Partie terminée !
-        </h1>
-        <p className="text-sm text-foreground/50">
-          Le classement final est sur la TV.
-        </p>
-      </main>
+      <>
+        <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
+          <Trophy
+            className="h-16 w-16 text-gold-warm"
+            aria-hidden="true"
+            fill="currentColor"
+          />
+          <h1 className="font-display text-3xl font-extrabold text-foreground">
+            Partie terminée !
+          </h1>
+          <p className="text-sm text-foreground/50">
+            Le classement final est sur la TV.
+          </p>
+        </main>
+        <RoomClosedOverlay visible={roomClosed} />
+      </>
     );
   }
 
@@ -319,6 +331,7 @@ export function PlayRemoteClient({
           onConfirm={handleAddPlayer}
           existingCount={slots.length}
         />
+        <RoomClosedOverlay visible={roomClosed} />
       </main>
     );
   }
@@ -411,6 +424,7 @@ export function PlayRemoteClient({
           }
         />
       )}
+      <RoomClosedOverlay visible={roomClosed} />
     </main>
   );
 }

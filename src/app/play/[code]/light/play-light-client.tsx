@@ -21,6 +21,7 @@ import { createClient } from "@/lib/supabase/client";
 import { PlayProfileEditModal } from "../play-profile-edit-modal";
 import { PlayFaceAFaceView } from "../play-face-a-face-view";
 import { AnswerButtons } from "@/components/tv/AnswerButtons";
+import { RoomClosedOverlay } from "@/components/tv/RoomClosedOverlay";
 
 interface PlayLightClientProps {
   code: string;
@@ -64,6 +65,9 @@ export function PlayLightClient({
   >("waiting");
   // P5.1 — Bascule en vue face-à-face quand on reçoit fa:vote-start.
   const [faMode, setFaMode] = useState(false);
+  // Q3.1 — Overlay full-screen "Partie fermée par l'hôte" quand on reçoit
+  // l'event room:closed depuis la TV.
+  const [roomClosed, setRoomClosed] = useState(false);
 
   // Reconnexion auto au mount
   useEffect(() => {
@@ -185,6 +189,11 @@ export function PlayLightClient({
       setFaMode(true);
     });
 
+    // Q3.1 — L'hôte a fermé la partie : bascule sur l'overlay redirect
+    ch.on("room:closed", () => {
+      setRoomClosed(true);
+    });
+
     function onBeforeUnload() {
       void ch.untrackPresence();
     }
@@ -227,36 +236,47 @@ export function PlayLightClient({
 
   if (!token) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-gold-warm" aria-hidden="true" />
-      </main>
+      <>
+        <main className="flex min-h-screen items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-gold-warm" aria-hidden="true" />
+        </main>
+        <RoomClosedOverlay visible={roomClosed} />
+      </>
     );
   }
 
   if (phase === "ended") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
-        <Trophy
-          className="h-16 w-16 text-gold-warm"
-          aria-hidden="true"
-          fill="currentColor"
-        />
-        <h1 className="font-display text-3xl font-extrabold text-foreground">
-          Partie terminée !
-        </h1>
-        <p className="text-foreground/70">
-          Tes réponses : <strong className="text-life-green">{score}</strong> bonnes.
-        </p>
-        <p className="text-sm text-foreground/50">
-          Le classement final est sur la TV.
-        </p>
-      </main>
+      <>
+        <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
+          <Trophy
+            className="h-16 w-16 text-gold-warm"
+            aria-hidden="true"
+            fill="currentColor"
+          />
+          <h1 className="font-display text-3xl font-extrabold text-foreground">
+            Partie terminée !
+          </h1>
+          <p className="text-foreground/70">
+            Tes réponses : <strong className="text-life-green">{score}</strong> bonnes.
+          </p>
+          <p className="text-sm text-foreground/50">
+            Le classement final est sur la TV.
+          </p>
+        </main>
+        <RoomClosedOverlay visible={roomClosed} />
+      </>
     );
   }
 
   // P5.1 — Bascule en mode face-à-face si la TV a déclenché le vote
   if (faMode && channelRef.current) {
-    return <PlayFaceAFaceView myToken={token} channel={channelRef.current} />;
+    return (
+      <>
+        <PlayFaceAFaceView myToken={token} channel={channelRef.current} />
+        <RoomClosedOverlay visible={roomClosed} />
+      </>
+    );
   }
 
   const isMyTurn =
@@ -341,6 +361,7 @@ export function PlayLightClient({
           initialAvatarUrl={avatarUrl}
         />
       )}
+      <RoomClosedOverlay visible={roomClosed} />
     </main>
   );
 }

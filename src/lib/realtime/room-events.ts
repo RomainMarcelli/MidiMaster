@@ -133,6 +133,11 @@ export interface RoomEvents {
   "player:winner": { token: string };
   "room:paused": PauseResumePayload;
   "room:resumed": PauseResumePayload;
+  /**
+   * Q3.1 — L'hôte a fermé la partie. Tous les joueurs sont notifiés
+   * pour afficher un écran de redirection.
+   */
+  "room:closed": { reason?: string };
   "answer:submit": AnswerSubmitPayload;
   heartbeat: HeartbeatPayload;
   // P5.1 — Face-à-face

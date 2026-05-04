@@ -254,9 +254,24 @@ export function TvHostRoom({
   /**
    * H4.3 — Lance l'arrêt de partie après confirmation via modal stylée
    * (au lieu du window.confirm natif "localhost:3000 indique : …").
+   *
+   * Q3.1 — Broadcast l'event `room:closed` AVANT de unsubscribe et de
+   * marquer la room ended. Tous les joueurs (light/remote/face-à-face)
+   * reçoivent l'event et basculent sur leur écran "Partie fermée par
+   * l'hôte" avec countdown 5s vers /play.
+   *
+   * On obtient un handle vers le channel via `joinTvChannel(code)` plutôt
+   * que `hostChannel` (qui est null en lobby) — grâce au cache + ref
+   * counting du wrapper, on récupère le channel déjà ouvert pour la
+   * presence, on incrémente refCount, on broadcast, puis on unsubscribe.
    */
   async function handleEnd() {
     setEnding(true);
+    const broadcastCh = joinTvChannel(code);
+    broadcastCh.send("room:closed", { reason: "host_left" });
+    // Petit délai pour laisser partir le broadcast avant unsubscribe.
+    await new Promise((r) => setTimeout(r, 300));
+    await broadcastCh.unsubscribe();
     if (hostChannel) await hostChannel.unsubscribe();
     await endTvRoom(roomId);
     setEnding(false);
