@@ -287,5 +287,243 @@
       { "text": "Sonic", "correct": false }
     ],
     "explication": "Sonic est la mascotte historique de Sega, l'éternel rival de Nintendo."
+  },
+  {
+    "type": "coup_par_coup",
+    "category_slug": "geographie",
+    "subcategory_slug": "monde",
+    "difficulte": 2,
+    "enonce": "Pays bordant la Méditerranée",
+    "reponses": [
+      { "text": "France", "correct": true },
+      { "text": "Italie", "correct": true },
+      { "text": "Grèce", "correct": true },
+      { "text": "Égypte", "correct": true },
+      { "text": "Maroc", "correct": true },
+      { "text": "Turquie", "correct": true },
+      { "text": "Portugal", "correct": false }
+    ],
+    "explication": "Le Portugal n'a qu'une façade atlantique. Tous les autres bordent la Méditerranée."
+  },
+  {
+    "type": "coup_par_coup",
+    "category_slug": "histoire",
+    "subcategory_slug": "xxe",
+    "difficulte": 2,
+    "enonce": "Pays signataires du Traité de Rome (1957)",
+    "reponses": [
+      { "text": "France", "correct": true },
+      { "text": "Allemagne de l'Ouest", "correct": true },
+      { "text": "Italie", "correct": true },
+      { "text": "Belgique", "correct": true },
+      { "text": "Pays-Bas", "correct": true },
+      { "text": "Luxembourg", "correct": true },
+      { "text": "Royaume-Uni", "correct": false }
+    ],
+    "explication": "Le Royaume-Uni n'a rejoint la CEE qu'en 1973. Les 6 fondateurs sont France, RFA, Italie, Benelux."
+  },
+  {
+    "type": "coup_par_coup",
+    "category_slug": "sport",
+    "subcategory_slug": "football",
+    "difficulte": 3,
+    "enonce": "Vainqueurs de la Coupe du monde de football",
+    "reponses": [
+      { "text": "Brésil", "correct": true },
+      { "text": "Allemagne", "correct": true },
+      { "text": "Argentine", "correct": true },
+      { "text": "Italie", "correct": true },
+      { "text": "France", "correct": true },
+      { "text": "Espagne", "correct": true },
+      { "text": "Pays-Bas", "correct": false }
+    ],
+    "explication": "Les Pays-Bas ont été 3 fois finalistes (1974, 1978, 2010) sans jamais gagner."
+  },
+  {
+    "type": "coup_par_coup",
+    "category_slug": "art",
+    "subcategory_slug": "peinture",
+    "difficulte": 3,
+    "enonce": "Peintres impressionnistes",
+    "reponses": [
+      { "text": "Claude Monet", "correct": true },
+      { "text": "Edgar Degas", "correct": true },
+      { "text": "Auguste Renoir", "correct": true },
+      { "text": "Camille Pissarro", "correct": true },
+      { "text": "Édouard Manet", "correct": true },
+      { "text": "Berthe Morisot", "correct": true },
+      { "text": "Salvador Dalí", "correct": false }
+    ],
+    "explication": "Salvador Dalí (1904-1989) est un peintre surréaliste, pas impressionniste."
+  },
+  {
+    "type": "coup_par_coup",
+    "category_slug": "litterature",
+    "subcategory_slug": "classiques-fr",
+    "difficulte": 3,
+    "enonce": "Romans de Victor Hugo",
+    "reponses": [
+      { "text": "Les Misérables", "correct": true },
+      { "text": "Notre-Dame de Paris", "correct": true },
+      { "text": "Quatrevingt-treize", "correct": true },
+      { "text": "Les Travailleurs de la mer", "correct": true },
+      { "text": "L'Homme qui rit", "correct": true },
+      { "text": "Han d'Islande", "correct": true },
+      { "text": "Madame Bovary", "correct": false }
+    ],
+    "explication": "Madame Bovary est un roman de Gustave Flaubert (1856)."
+  },
+  {
+    "type": "coup_par_coup",
+    "category_slug": "svt",
+    "subcategory_slug": "animaux",
+    "difficulte": 1,
+    "enonce": "Mammifères marins",
+    "reponses": [
+      { "text": "Baleine bleue", "correct": true },
+      { "text": "Dauphin", "correct": true },
+      { "text": "Phoque", "correct": true },
+      { "text": "Orque", "correct": true },
+      { "text": "Otarie", "correct": true },
+      { "text": "Cachalot", "correct": true },
+      { "text": "Requin blanc", "correct": false }
+    ],
+    "explication": "Le requin blanc est un poisson cartilagineux, pas un mammifère."
+  },
+  {
+    "type": "coup_par_coup",
+    "category_slug": "chimie",
+    "subcategory_slug": "elements",
+    "difficulte": 3,
+    "enonce": "Métaux nobles (peu réactifs)",
+    "reponses": [
+      { "text": "Or", "correct": true },
+      { "text": "Argent", "correct": true },
+      { "text": "Platine", "correct": true },
+      { "text": "Palladium", "correct": true },
+      { "text": "Rhodium", "correct": true },
+      { "text": "Iridium", "correct": true },
+      { "text": "Fer", "correct": false }
+    ],
+    "explication": "Le fer s'oxyde facilement (rouille), il n'est PAS un métal noble."
+  },
+  {
+    "type": "coup_par_coup",
+    "category_slug": "physique",
+    "subcategory_slug": "astronomie",
+    "difficulte": 2,
+    "enonce": "Planètes du système solaire",
+    "reponses": [
+      { "text": "Mercure", "correct": true },
+      { "text": "Vénus", "correct": true },
+      { "text": "Terre", "correct": true },
+      { "text": "Mars", "correct": true },
+      { "text": "Jupiter", "correct": true },
+      { "text": "Saturne", "correct": true },
+      { "text": "Pluton", "correct": false }
+    ],
+    "explication": "Pluton est une planète NAINE depuis 2006 (UAI), pas une planète à part entière."
+  },
+  {
+    "type": "coup_par_coup",
+    "category_slug": "cinema-tv",
+    "subcategory_slug": "films-cultes",
+    "difficulte": 3,
+    "enonce": "Films réalisés par Steven Spielberg",
+    "reponses": [
+      { "text": "Jurassic Park", "correct": true },
+      { "text": "E.T. l'extra-terrestre", "correct": true },
+      { "text": "Les Dents de la mer", "correct": true },
+      { "text": "Indiana Jones", "correct": true },
+      { "text": "La Liste de Schindler", "correct": true },
+      { "text": "Il faut sauver le soldat Ryan", "correct": true },
+      { "text": "Pulp Fiction", "correct": false }
+    ],
+    "explication": "Pulp Fiction (1994) est un film de Quentin Tarantino."
+  },
+  {
+    "type": "coup_par_coup",
+    "category_slug": "musique",
+    "subcategory_slug": "rock-pop",
+    "difficulte": 3,
+    "enonce": "Membres des Beatles",
+    "reponses": [
+      { "text": "John Lennon", "correct": true },
+      { "text": "Paul McCartney", "correct": true },
+      { "text": "George Harrison", "correct": true },
+      { "text": "Ringo Starr", "correct": true },
+      { "text": "Stuart Sutcliffe", "correct": true },
+      { "text": "Pete Best", "correct": true },
+      { "text": "Mick Jagger", "correct": false }
+    ],
+    "explication": "Mick Jagger est le chanteur des Rolling Stones, jamais membre des Beatles."
+  },
+  {
+    "type": "coup_par_coup",
+    "category_slug": "gastronomie",
+    "subcategory_slug": "cuisine-fr",
+    "difficulte": 2,
+    "enonce": "Fromages français",
+    "reponses": [
+      { "text": "Camembert", "correct": true },
+      { "text": "Roquefort", "correct": true },
+      { "text": "Comté", "correct": true },
+      { "text": "Brie", "correct": true },
+      { "text": "Reblochon", "correct": true },
+      { "text": "Munster", "correct": true },
+      { "text": "Mozzarella", "correct": false }
+    ],
+    "explication": "La mozzarella est un fromage italien (origine Campanie)."
+  },
+  {
+    "type": "coup_par_coup",
+    "category_slug": "culture-g",
+    "subcategory_slug": "mythologie",
+    "difficulte": 3,
+    "enonce": "Dieux de l'Olympe (mythologie grecque)",
+    "reponses": [
+      { "text": "Zeus", "correct": true },
+      { "text": "Héra", "correct": true },
+      { "text": "Apollon", "correct": true },
+      { "text": "Athéna", "correct": true },
+      { "text": "Poséidon", "correct": true },
+      { "text": "Aphrodite", "correct": true },
+      { "text": "Hadès", "correct": false }
+    ],
+    "explication": "Hadès règne sur les Enfers et n'habite PAS l'Olympe (les 12 olympiens sont les autres)."
+  },
+  {
+    "type": "coup_par_coup",
+    "category_slug": "jeu-video",
+    "subcategory_slug": "consoles",
+    "difficulte": 2,
+    "enonce": "Consoles de Sony PlayStation",
+    "reponses": [
+      { "text": "PS1", "correct": true },
+      { "text": "PS2", "correct": true },
+      { "text": "PS3", "correct": true },
+      { "text": "PS4", "correct": true },
+      { "text": "PS5", "correct": true },
+      { "text": "PS Vita", "correct": true },
+      { "text": "Xbox 360", "correct": false }
+    ],
+    "explication": "La Xbox 360 est une console Microsoft, lancée en 2005 — pas Sony."
+  },
+  {
+    "type": "coup_par_coup",
+    "category_slug": "actualite",
+    "subcategory_slug": "politique",
+    "difficulte": 3,
+    "enonce": "Présidents français de la Ve République",
+    "reponses": [
+      { "text": "Charles de Gaulle", "correct": true },
+      { "text": "Georges Pompidou", "correct": true },
+      { "text": "Valéry Giscard d'Estaing", "correct": true },
+      { "text": "François Mitterrand", "correct": true },
+      { "text": "Jacques Chirac", "correct": true },
+      { "text": "Nicolas Sarkozy", "correct": true },
+      { "text": "Vincent Auriol", "correct": false }
+    ],
+    "explication": "Vincent Auriol fut président de la IVe République (1947-1954), pas de la Ve."
   }
 ]

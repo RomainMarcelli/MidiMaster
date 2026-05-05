@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { PlayProfileEditModal } from "../play-profile-edit-modal";
 import { PlayFaceAFaceView } from "../play-face-a-face-view";
+import { PlayDouzeCoupsView } from "../play-douze-coups-view";
 import { AnswerButtons } from "@/components/tv/AnswerButtons";
 import { RoomClosedOverlay } from "@/components/tv/RoomClosedOverlay";
 
@@ -65,6 +66,18 @@ export function PlayLightClient({
   >("waiting");
   // P5.1 — Bascule en vue face-à-face quand on reçoit fa:vote-start.
   const [faMode, setFaMode] = useState(false);
+  // Vague R — Bascule en vue 12 Coups TV (Coup d'Envoi / Coup par Coup /
+  // duels) dès qu'on reçoit le premier event dc:* depuis la TV. Liste des
+  // joueurs chargée depuis la BDD (utile pour la sélection de candidat duel).
+  const [dcMode, setDcMode] = useState(false);
+  const [dcPlayers, setDcPlayers] = useState<
+    Array<{
+      token: string;
+      pseudo: string;
+      avatarUrl: string | null;
+      isEliminated: boolean;
+    }>
+  >([]);
   // Q3.1 — Overlay full-screen "Partie fermée par l'hôte" quand on reçoit
   // l'event room:closed depuis la TV.
   const [roomClosed, setRoomClosed] = useState(false);
@@ -100,6 +113,55 @@ export function PlayLightClient({
         setAvatarUrl((data?.avatar_url as string | null) ?? null);
       });
   }, [playerId]);
+
+  // Vague R — Charge la liste de tous les joueurs de la room (pour la
+  // sélection de candidat lors d'un duel). On rafraichit aussi sur
+  // changements postgres pour refléter joueurs éliminés / pseudos modifiés.
+  useEffect(() => {
+    const supabase = createClient();
+    let cancelled = false;
+    function load() {
+      void supabase
+        .from("tv_room_players")
+        .select("player_token, pseudo, avatar_url")
+        .eq("room_id", roomId)
+        .then(({ data }) => {
+          if (cancelled || !data) return;
+          setDcPlayers(
+            (
+              data as Array<{
+                player_token: string;
+                pseudo: string;
+                avatar_url: string | null;
+              }>
+            ).map((r) => ({
+              token: r.player_token,
+              pseudo: r.pseudo,
+              avatarUrl: r.avatar_url,
+              isEliminated: false,
+            })),
+          );
+        });
+    }
+    load();
+    const ch = supabase
+      .channel(`tv-room-players-light:${roomId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "tv_room_players",
+          filter: `room_id=eq.${roomId}`,
+        },
+        () => load(),
+      )
+      .subscribe();
+    return () => {
+      cancelled = true;
+      void supabase.removeChannel(ch);
+    };
+  }, [roomId]);
 
   // P2.1 — Suit le statut de la room (waiting/playing/...) pour verrouiller
   // l'édition de profil dès le démarrage.
@@ -189,6 +251,13 @@ export function PlayLightClient({
       setFaMode(true);
     });
 
+    // Vague R — Bascule en vue 12 Coups TV dès qu'on reçoit n'importe
+    // quel event de la phase Coup d'Envoi / Coup par Coup / duels.
+    // PlayDouzeCoupsView reposera ses propres listeners en plus.
+    ch.on("ce:question-show", () => setDcMode(true));
+    ch.on("cpc:question-show", () => setDcMode(true));
+    ch.on("ce:duel-start", () => setDcMode(true));
+
     // Q3.1 — L'hôte a fermé la partie : bascule sur l'overlay redirect
     ch.on("room:closed", () => {
       setRoomClosed(true);
@@ -274,6 +343,23 @@ export function PlayLightClient({
     return (
       <>
         <PlayFaceAFaceView myToken={token} channel={channelRef.current} />
+        <RoomClosedOverlay visible={roomClosed} />
+      </>
+    );
+  }
+
+  // Vague R — Bascule en vue 12 Coups TV (Coup d'Envoi / Coup par Coup /
+  // duels) dès que la TV envoie un event dc:*. La vue dispatche en interne
+  // selon la sous-phase (à toi / spectateur / duel-pick-candidate, etc.).
+  if (dcMode && channelRef.current) {
+    return (
+      <>
+        <PlayDouzeCoupsView
+          myToken={token}
+          myPseudo={pseudo || "..."}
+          channel={channelRef.current}
+          players={dcPlayers}
+        />
         <RoomClosedOverlay visible={roomClosed} />
       </>
     );

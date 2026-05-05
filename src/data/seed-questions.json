@@ -1838,5 +1838,285 @@
     ],
     "reponses": [],
     "explication": "Nelson Mandela (1918-2013)."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "geographie",
+    "subcategory_slug": "capitales",
+    "difficulte": 1,
+    "enonce": "Quelle est la capitale de l'Australie ?",
+    "reponses": [
+      {"text": "Sydney", "correct": false},
+      {"text": "Melbourne", "correct": false},
+      {"text": "Canberra", "correct": true},
+      {"text": "Perth", "correct": false}
+    ],
+    "explication": "Canberra a été choisie comme capitale en 1908, comme compromis entre Sydney et Melbourne."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "geographie",
+    "subcategory_slug": "fleuves-montagnes",
+    "difficulte": 2,
+    "enonce": "Quel est le plus long fleuve du monde ?",
+    "reponses": [
+      {"text": "Le Nil", "correct": false},
+      {"text": "L'Amazone", "correct": true},
+      {"text": "Le Yangtsé", "correct": false},
+      {"text": "Le Mississippi", "correct": false}
+    ],
+    "explication": "L'Amazone (~7062 km) a été reconnu plus long que le Nil (~6650 km) après des relevés en 2007."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "geographie",
+    "subcategory_slug": "europe",
+    "difficulte": 2,
+    "enonce": "Combien de pays composent l'Union européenne en 2025 ?",
+    "reponses": [
+      {"text": "25", "correct": false},
+      {"text": "27", "correct": true},
+      {"text": "28", "correct": false},
+      {"text": "30", "correct": false}
+    ],
+    "explication": "27 États membres depuis le départ du Royaume-Uni (Brexit, 31 janvier 2020)."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "histoire",
+    "subcategory_slug": "antiquite",
+    "difficulte": 2,
+    "enonce": "Quel empereur romain est célèbre pour avoir interdit le christianisme avant de se convertir ?",
+    "reponses": [
+      {"text": "Néron", "correct": false},
+      {"text": "Constantin", "correct": true},
+      {"text": "Auguste", "correct": false},
+      {"text": "Caligula", "correct": false}
+    ],
+    "explication": "Constantin Ier édicte l'édit de Milan en 313 qui légalise le christianisme dans l'Empire."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "histoire",
+    "subcategory_slug": "moyen-age",
+    "difficulte": 2,
+    "enonce": "Qui a vaincu Jeanne d'Arc à Compiègne ?",
+    "reponses": [
+      {"text": "Les Anglais", "correct": false},
+      {"text": "Les Bourguignons", "correct": true},
+      {"text": "Les Castillans", "correct": false},
+      {"text": "Les Allemands", "correct": false}
+    ],
+    "explication": "Jeanne d'Arc est capturée le 23 mai 1430 par les Bourguignons, alliés des Anglais."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "art",
+    "subcategory_slug": "peinture",
+    "difficulte": 1,
+    "enonce": "Qui a peint « La Joconde » ?",
+    "reponses": [
+      {"text": "Raphaël", "correct": false},
+      {"text": "Léonard de Vinci", "correct": true},
+      {"text": "Michel-Ange", "correct": false},
+      {"text": "Caravage", "correct": false}
+    ],
+    "explication": "Œuvre peinte entre 1503 et 1519, exposée au Louvre."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "art",
+    "subcategory_slug": "peinture",
+    "difficulte": 3,
+    "enonce": "Quel mouvement artistique est associé à Claude Monet ?",
+    "reponses": [
+      {"text": "Cubisme", "correct": false},
+      {"text": "Surréalisme", "correct": false},
+      {"text": "Impressionnisme", "correct": true},
+      {"text": "Romantisme", "correct": false}
+    ],
+    "explication": "Le terme vient de son tableau « Impression, soleil levant » (1872)."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "litterature",
+    "subcategory_slug": "classiques-fr",
+    "difficulte": 2,
+    "enonce": "Qui a écrit « Les Misérables » ?",
+    "reponses": [
+      {"text": "Émile Zola", "correct": false},
+      {"text": "Victor Hugo", "correct": true},
+      {"text": "Honoré de Balzac", "correct": false},
+      {"text": "Alexandre Dumas", "correct": false}
+    ],
+    "explication": "Victor Hugo, publié en 1862."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "svt",
+    "subcategory_slug": "corps-humain",
+    "difficulte": 1,
+    "enonce": "Combien d'os compte le corps humain adulte ?",
+    "reponses": [
+      {"text": "186", "correct": false},
+      {"text": "206", "correct": true},
+      {"text": "256", "correct": false},
+      {"text": "306", "correct": false}
+    ],
+    "explication": "206 os chez l'adulte. À la naissance, le bébé en a environ 270 (certains fusionnent en grandissant)."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "svt",
+    "subcategory_slug": "animaux",
+    "difficulte": 2,
+    "enonce": "Quel est le mammifère le plus rapide sur terre ?",
+    "reponses": [
+      {"text": "Le lion", "correct": false},
+      {"text": "Le guépard", "correct": true},
+      {"text": "Le cheval", "correct": false},
+      {"text": "L'antilope", "correct": false}
+    ],
+    "explication": "Le guépard atteint 110-120 km/h sur de courtes distances."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "chimie",
+    "subcategory_slug": "elements",
+    "difficulte": 2,
+    "enonce": "Quel est le symbole chimique de l'or ?",
+    "reponses": [
+      {"text": "Or", "correct": false},
+      {"text": "Au", "correct": true},
+      {"text": "Ag", "correct": false},
+      {"text": "Go", "correct": false}
+    ],
+    "explication": "Au, du latin « aurum ». Ag est l'argent (argentum)."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "physique",
+    "subcategory_slug": "astronomie",
+    "difficulte": 2,
+    "enonce": "Combien de planètes compte le système solaire (depuis 2006) ?",
+    "reponses": [
+      {"text": "7", "correct": false},
+      {"text": "8", "correct": true},
+      {"text": "9", "correct": false},
+      {"text": "10", "correct": false}
+    ],
+    "explication": "Pluton a été reclassée en planète naine par l'UAI en 2006."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "physique",
+    "subcategory_slug": "astronomie",
+    "difficulte": 1,
+    "enonce": "Quelle est la planète la plus proche du Soleil ?",
+    "reponses": [
+      {"text": "Vénus", "correct": false},
+      {"text": "Mercure", "correct": true},
+      {"text": "Mars", "correct": false},
+      {"text": "Terre", "correct": false}
+    ],
+    "explication": "Mercure orbite à environ 58 millions de km du Soleil."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "sport",
+    "subcategory_slug": "football",
+    "difficulte": 2,
+    "enonce": "Quelle équipe a gagné la Coupe du monde de football 2022 ?",
+    "reponses": [
+      {"text": "France", "correct": false},
+      {"text": "Argentine", "correct": true},
+      {"text": "Croatie", "correct": false},
+      {"text": "Maroc", "correct": false}
+    ],
+    "explication": "L'Argentine de Messi bat la France 4-2 aux tirs au but le 18 décembre 2022."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "sport",
+    "subcategory_slug": "tennis",
+    "difficulte": 2,
+    "enonce": "Sur quelle surface se joue Roland-Garros ?",
+    "reponses": [
+      {"text": "Gazon", "correct": false},
+      {"text": "Dur", "correct": false},
+      {"text": "Terre battue", "correct": true},
+      {"text": "Synthétique", "correct": false}
+    ],
+    "explication": "Roland-Garros est le seul Grand Chelem joué sur terre battue."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "cinema-tv",
+    "subcategory_slug": "films-cultes",
+    "difficulte": 2,
+    "enonce": "Qui a réalisé « Pulp Fiction » ?",
+    "reponses": [
+      {"text": "Martin Scorsese", "correct": false},
+      {"text": "Quentin Tarantino", "correct": true},
+      {"text": "Steven Spielberg", "correct": false},
+      {"text": "David Fincher", "correct": false}
+    ],
+    "explication": "Quentin Tarantino, sorti en 1994, Palme d'or à Cannes la même année."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "musique",
+    "subcategory_slug": "chanson-fr",
+    "difficulte": 1,
+    "enonce": "Qui a chanté « Ne me quitte pas » ?",
+    "reponses": [
+      {"text": "Charles Aznavour", "correct": false},
+      {"text": "Jacques Brel", "correct": true},
+      {"text": "Léo Ferré", "correct": false},
+      {"text": "Georges Brassens", "correct": false}
+    ],
+    "explication": "Jacques Brel, sortie en 1959. Reprise par d'innombrables artistes."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "gastronomie",
+    "subcategory_slug": "cuisine-fr",
+    "difficulte": 2,
+    "enonce": "Quel est le plat traditionnel de Marseille ?",
+    "reponses": [
+      {"text": "Cassoulet", "correct": false},
+      {"text": "Bouillabaisse", "correct": true},
+      {"text": "Tartiflette", "correct": false},
+      {"text": "Choucroute", "correct": false}
+    ],
+    "explication": "La bouillabaisse, soupe de poissons traditionnelle de la côte provençale."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "culture-g",
+    "subcategory_slug": "inventions",
+    "difficulte": 2,
+    "enonce": "Qui a inventé le téléphone (officiellement) ?",
+    "reponses": [
+      {"text": "Thomas Edison", "correct": false},
+      {"text": "Alexander Graham Bell", "correct": true},
+      {"text": "Nikola Tesla", "correct": false},
+      {"text": "Guglielmo Marconi", "correct": false}
+    ],
+    "explication": "Brevet déposé par Bell en 1876, controverse historique avec Antonio Meucci."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "culture-g",
+    "subcategory_slug": "mythologie",
+    "difficulte": 2,
+    "enonce": "Qui est le dieu grec de la guerre ?",
+    "reponses": [
+      {"text": "Zeus", "correct": false},
+      {"text": "Apollon", "correct": false},
+      {"text": "Arès", "correct": true},
+      {"text": "Poséidon", "correct": false}
+    ],
+    "explication": "Arès chez les Grecs, équivalent de Mars chez les Romains."
   }
 ]

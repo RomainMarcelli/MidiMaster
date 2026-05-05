@@ -150,6 +150,119 @@ export interface RoomEvents {
   "fa:go": { presenterToken: string };
   "fa:answer": FaAnswerPayload;
   "fa:end": FaEndPayload;
+  // ==========================================================================
+  // Vague R — Mode 12 Coups TV (Coup d'Envoi + Coup par Coup + duels)
+  // ==========================================================================
+  /** Broadcast d'une nouvelle question Coup d'Envoi (quizz_4). */
+  "ce:question-show": {
+    questionId: string;
+    enonce: string;
+    format: string | null;
+    choices: Array<{ idx: number; text: string }>;
+    currentPlayerToken: string;
+    currentPlayerPseudo: string;
+  };
+  /** Réponse d'un joueur à une question Coup d'Envoi. */
+  "ce:answer-submit": {
+    questionId: string;
+    chosenIdx: number;
+    playerToken: string;
+  };
+  /** Résultat de la réponse + transition (broadcast par la TV). */
+  "ce:question-result": {
+    questionId: string;
+    byToken: string;
+    chosenIdx: number;
+    correctIdx: number;
+    isCorrect: boolean;
+    explication?: string | null;
+  };
+  /** Un joueur tombe au rouge — démarrage du duel. */
+  "ce:duel-start": {
+    challengerToken: string;
+    challengerPseudo: string;
+  };
+  /** Le challenger a choisi son candidat. */
+  "ce:duel-candidate-selected": {
+    challengerToken: string;
+    candidateToken: string;
+    candidatePseudo: string;
+  };
+  /** Les 2 thèmes proposés au candidat. */
+  "ce:duel-theme-proposals": {
+    candidateToken: string;
+    themes: Array<{ id: number; slug: string; nom: string }>;
+  };
+  /** Le candidat a choisi son thème. */
+  "ce:duel-theme-chosen": {
+    candidateToken: string;
+    themeId: number;
+    themeNom: string;
+  };
+  /** Question du duel (quizz_4). */
+  "ce:duel-question": {
+    questionId: string;
+    enonce: string;
+    choices: Array<{ idx: number; text: string }>;
+    candidateToken: string;
+  };
+  /** Réponse du candidat au duel. */
+  "ce:duel-answer-submit": {
+    questionId: string;
+    chosenIdx: number;
+    candidateToken: string;
+  };
+  /** Résultat du duel. */
+  "ce:duel-result": {
+    questionId: string;
+    candidateToken: string;
+    challengerToken: string;
+    chosenIdx: number;
+    correctIdx: number;
+    candidateCorrect: boolean;
+    /** True si le challenger est éliminé suite au duel. */
+    challengerEliminated: boolean;
+  };
+  /** Animation d'élimination de fin de phase. */
+  "ce:elimination": {
+    eliminatedToken: string;
+    eliminatedPseudo: string;
+    /** Phase qui se termine (suivant = nouvelle phase). */
+    fromPhase: "coup-envoi" | "coup-par-coup";
+    nextPhase: "coup-par-coup" | "face-a-face";
+  };
+  // -- Coup par Coup (R2)
+  /** Broadcast d'une nouvelle question Coup par Coup (intrus parmi 7). */
+  "cpc:question-show": {
+    questionId: string;
+    /** Thème (libellé) — ex. "Rivières françaises" */
+    enonce: string;
+    propositions: Array<{ idx: number; text: string }>;
+    currentPlayerToken: string;
+    currentPlayerPseudo: string;
+  };
+  /** Réponse Coup par Coup (clic sur une proposition, qu'elle soit l'intrus ou non). */
+  "cpc:answer-submit": {
+    questionId: string;
+    chosenIdx: number;
+    playerToken: string;
+  };
+  /** Résultat de la réponse + transition. */
+  "cpc:question-result": {
+    questionId: string;
+    byToken: string;
+    chosenIdx: number;
+    intrusIdx: number;
+    isCorrect: boolean;
+    explication?: string | null;
+  };
+  // -- Phase / Podium / Restart (R3)
+  /** Changement de phase global du mode 12 Coups TV. */
+  "dc:phase-change": {
+    phase: string;
+  };
+  /** L'hôte a relancé une partie depuis le podium → reset au lobby. */
+  "room:restart": Record<string, never>;
 }
 
 export type RoomEventName = keyof RoomEvents;

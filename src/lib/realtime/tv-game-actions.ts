@@ -113,8 +113,10 @@ export async function saveTvGameState(input: {
 
   await supabase
     .from("tv_rooms")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .update({
+      // TvGameState est sérialisable JSONB. Cast any local au champ
+      // uniquement (le reste de l'objet reste typé strictement).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       state: input.state as any,
       ...(input.status ? { status: input.status } : {}),
       ...(input.status === "ended"

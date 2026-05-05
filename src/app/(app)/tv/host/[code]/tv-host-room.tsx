@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Crown, Loader2, Mic, Play, Smartphone, Tv, Users, X } from "lucide-react";
+import { Bot, Crown, Loader2, Mic, MinusCircle, Play, Smartphone, Tv, Users, X } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
@@ -15,9 +15,14 @@ import { joinTvChannel, type TvChannelHandle } from "@/lib/realtime/tv-channel";
 import { type TvGameState } from "@/lib/realtime/tv-game-state";
 import { prepareFaceAFace } from "@/lib/realtime/face-a-face-actions";
 import { type FaceAFaceState } from "@/lib/realtime/face-a-face-state";
+import { startDouzeCoupsTv } from "@/lib/realtime/tv-douze-coups-actions";
+import { type TvDouzeCoupsState } from "@/lib/realtime/tv-douze-coups-state";
 import { AnimEffect } from "@/components/animations/AnimEffect";
 import { WaitingCarousel } from "./waiting-carousel";
 import { TvFaceAFaceView } from "./tv-face-a-face-view";
+import { TvDouzeCoupsHost } from "./tv-douze-coups-host";
+import { ShareLinkButtons } from "@/components/tv/ShareLinkButtons";
+import { addBotToRoom, removeBotFromRoom } from "@/lib/realtime/bot-actions";
 
 interface PlayerRow {
   id: string;
@@ -27,6 +32,10 @@ interface PlayerRow {
   joinedAt: string;
   /** P1.1 — token pour cross-ref Presence. */
   token: string;
+  /** Vague S3 — true si bot IA (pseudo "Bot N", token "bot:..."). */
+  isBot?: boolean;
+  /** Vague S3 — taux de réussite cible du bot (0..100). Default 70. */
+  botSkill?: number;
 }
 
 interface TvHostRoomProps {
@@ -97,6 +106,8 @@ export function TvHostRoom({
               avatar_url: string | null;
               joined_at: string;
               player_token: string;
+              is_bot?: boolean;
+              bot_skill?: number;
             };
             setPlayers((prev) => {
               if (prev.some((p) => p.id === r.id)) return prev;
@@ -109,6 +120,8 @@ export function TvHostRoom({
                   isConnected: false, // mis à jour via Presence
                   joinedAt: r.joined_at,
                   token: r.player_token,
+                  isBot: r.is_bot ?? r.player_token.startsWith("bot:"),
+                  botSkill: r.bot_skill ?? 70,
                 },
               ];
             });
@@ -174,28 +187,78 @@ export function TvHostRoom({
   }, [code, roomId]);
 
   // Merge BDD + Presence pour l'UI : isConnected vient de Presence.
+  // Vague S3 — Les bots sont toujours "connectés" (ils n'ont pas de
+  // device qui peut être hors ligne ; l'orchestrateur TV simule leurs
+  // réponses).
   const playersWithPresence = useMemo(
     () =>
       players.map((p) => ({
         ...p,
-        isConnected: presenceTokens.has(p.token),
+        isConnected: p.isBot ? true : presenceTokens.has(p.token),
       })),
     [players, presenceTokens],
   );
 
+  // Vague S — Le mode 12 Coups TV exige exactement 4 joueurs (humains +
+  // bots cumulés). Voir le check explicite dans handleStartDouzeCoups.
   const canStart = useMemo(
-    () => playersWithPresence.filter((p) => p.isConnected).length >= 2,
+    () => playersWithPresence.filter((p) => p.isConnected).length >= 4,
     [playersWithPresence],
   );
 
   // État du jeu TV (en mode playing). Chargé via prepareTvGame ou via
   // un SELECT sur tv_rooms.state si on revient sur la page après refresh.
   const [game, setGame] = useState<TvGameState | null>(null);
+  // Ref synchrone sur `game` pour permettre aux callbacks Realtime de
+  // lire l'état courant SANS passer par setState((prev) => ...). Évite
+  // les side effects dans les state updaters (anti-pattern React 18).
+  const gameRef = useRef<TvGameState | null>(null);
+  gameRef.current = game;
   const [hostChannel, setHostChannel] = useState<TvChannelHandle | null>(null);
   // P5.1 — État du face-à-face (null tant que non démarré). Si non null,
   // on affiche TvFaceAFaceView au lieu du flux normal.
   const [faState, setFaState] = useState<FaceAFaceState | null>(null);
   const [startingFa, setStartingFa] = useState(false);
+  // Vague R — État du mode "12 Coups" (mode complet à 3 phases). Si non
+  // null, on bascule sur TvDouzeCoupsHost qui orchestre tout le flux.
+  const [dcState, setDcState] = useState<TvDouzeCoupsState | null>(null);
+  const [startingDc, setStartingDc] = useState(false);
+  // Vague S3 — état UI : ajout/suppression de bots en cours +
+  // niveau de skill du bot à ajouter (40=facile, 70=moyen, 90=difficile).
+  const [botBusy, setBotBusy] = useState(false);
+  const [botSkillLevel, setBotSkillLevel] = useState<"easy" | "medium" | "hard">(
+    "medium",
+  );
+
+  /** Vague S3 — Ajoute un bot dans la room (jusqu'à 8 joueurs total). */
+  async function handleAddBot() {
+    if (botBusy || status !== "waiting") return;
+    const skill =
+      botSkillLevel === "easy" ? 40 : botSkillLevel === "hard" ? 90 : 70;
+    setBotBusy(true);
+    const res = await addBotToRoom({ roomId, botSkill: skill });
+    setBotBusy(false);
+    if (!res.ok) {
+      alert(res.message);
+      return;
+    }
+    // Le INSERT postgres_changes va automatiquement enrichir `players`
+    // côté client, pas besoin de mutation manuelle ici.
+  }
+
+  /** Vague S3 — Retire un bot de la room. */
+  async function handleRemoveBot(botToken: string) {
+    if (botBusy || status !== "waiting") return;
+    setBotBusy(true);
+    const res = await removeBotFromRoom({ roomId, botToken });
+    setBotBusy(false);
+    if (!res.ok) {
+      alert(res.message);
+      return;
+    }
+    // Le DELETE postgres_changes va automatiquement retirer la ligne
+    // côté client.
+  }
 
   /** P5.1 — Lance le face-à-face avec les 2 premiers joueurs en ligne. */
   async function handleStartFaceAFace() {
@@ -228,6 +291,52 @@ export function TvHostRoom({
       return;
     }
     setFaState(res.state);
+    setStatus("playing");
+  }
+
+  /** Vague R — Lance le mode "12 Coups" avec tous les joueurs en ligne. */
+  async function handleStartDouzeCoups() {
+    if (startingDc) return;
+    const online = playersWithPresence.filter((p) => p.isConnected);
+    // Vague S — Le mode 12 Coups est conçu pour exactement 4 joueurs (3
+    // phases enchaînées avec élimination). Avec moins de 4 (humains +
+    // bots cumulés), les transitions de phase produisent des états
+    // dégénérés (face-à-face avec 1 seul finaliste, etc.). On impose ≥4
+    // au démarrage et on incite à compléter avec des bots si besoin.
+    if (online.length < 4) {
+      alert(
+        "Le mode 12 Coups demande 4 joueurs.\n\n" +
+          "Tu as " +
+          online.length +
+          " joueur(s) connecté(s). Ajoute des bots pour compléter à 4 (bouton « Ajouter un bot » ci-dessus).",
+      );
+      return;
+    }
+    setStartingDc(true);
+    const turnOrder = online
+      .sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))
+      .map((p) => p.token);
+    const playersMeta = online.map((p) => ({
+      token: p.token,
+      pseudo: p.pseudo,
+      isBot: p.isBot ?? p.token.startsWith("bot:"),
+      // Skill remonté du PlayerRow (extrait du postgres_changes), default
+      // 70 si le bot a été ajouté avant la migration 0018.
+      botSkill: p.botSkill ?? 70,
+      avatarUrl: p.avatarUrl,
+    }));
+    const res = await startDouzeCoupsTv({
+      roomId,
+      turnOrder,
+      playersMeta,
+      presenterDesignationMode: "random",
+    });
+    setStartingDc(false);
+    if (!res.ok) {
+      alert(res.message);
+      return;
+    }
+    setDcState(res.state);
     setStatus("playing");
   }
 
@@ -327,69 +436,68 @@ export function TvHostRoom({
     ch.on("answer:submit", async (payload) => {
       // Verrou : on n'accepte que la réponse du joueur dont c'est le tour
       // ET de la bonne question (anti-spam, anti-race condition).
-      setGame((prev) => {
-        if (!prev) return prev;
-        if (prev.phase !== "playing") return prev;
-        const q = prev.questions[prev.currentQuestionIdx];
-        if (!q || q.id !== payload.questionId) return prev;
-        if (payload.playerToken !== prev.currentPlayerToken) return prev;
+      // Lecture via gameRef pour éviter de mettre les side effects (ch.send,
+      // saveTvGameState, setTimeout) dans le state updater — sinon React 18
+      // warn "Cannot update a component while rendering a different one".
+      const prev = gameRef.current;
+      if (!prev) return;
+      if (prev.phase !== "playing") return;
+      const q = prev.questions[prev.currentQuestionIdx];
+      if (!q || q.id !== payload.questionId) return;
+      if (payload.playerToken !== prev.currentPlayerToken) return;
 
-        const isCorrect = payload.chosenIdx === q.correctIdx;
-        const newScores = {
-          ...prev.scores,
-          [payload.playerToken]:
-            (prev.scores[payload.playerToken] ?? 0) + (isCorrect ? 1 : 0),
-        };
+      const isCorrect = payload.chosenIdx === q.correctIdx;
+      const newScores = {
+        ...prev.scores,
+        [payload.playerToken]:
+          (prev.scores[payload.playerToken] ?? 0) + (isCorrect ? 1 : 0),
+      };
 
-        // Broadcast résultat
-        ch.send("question:result", {
-          questionId: q.id,
-          byToken: payload.playerToken,
-          chosenIdx: payload.chosenIdx,
-          correctIdx: q.correctIdx,
-          isCorrect,
-          explication: q.explication ?? null,
-        });
+      const nextRound = prev.currentRound + 1;
+      const isLast = nextRound >= prev.totalRounds;
+      const nextIdx =
+        (prev.turnOrder.indexOf(payload.playerToken) + 1) %
+        prev.turnOrder.length;
+      const nextToken = prev.turnOrder[nextIdx] ?? null;
+      const nextQIdx = (prev.currentQuestionIdx + 1) % prev.questions.length;
 
-        // Avance après 3 s pour laisser lire la bonne réponse
-        const nextRound = prev.currentRound + 1;
-        const isLast = nextRound >= prev.totalRounds;
-        const nextIdx =
-          (prev.turnOrder.indexOf(payload.playerToken) + 1) %
-          prev.turnOrder.length;
-        const nextToken = prev.turnOrder[nextIdx] ?? null;
-        const nextQIdx = (prev.currentQuestionIdx + 1) % prev.questions.length;
+      const nextState: TvGameState = isLast
+        ? {
+            ...prev,
+            scores: newScores,
+            phase: "results",
+          }
+        : {
+            ...prev,
+            scores: newScores,
+            currentQuestionIdx: nextQIdx,
+            currentPlayerToken: nextToken,
+            currentRound: nextRound,
+          };
 
-        const nextState: TvGameState = isLast
-          ? {
-              ...prev,
-              scores: newScores,
-              phase: "results",
-            }
-          : {
-              ...prev,
-              scores: newScores,
-              currentQuestionIdx: nextQIdx,
-              currentPlayerToken: nextToken,
-              currentRound: nextRound,
-            };
+      // State update (assignation pure)
+      gameRef.current = nextState;
+      setGame(nextState);
 
-        // Persiste l'état (best-effort)
-        void saveTvGameState({
-          roomId,
-          state: nextState,
-          status: isLast ? "ended" : undefined,
-        });
-
-        // Diffuse la prochaine question après le délai de feedback
-        if (!isLast) {
-          window.setTimeout(() => broadcastCurrent(nextState), 3500);
-        } else {
-          ch.send("phase:change", { phase: "results" });
-        }
-
-        return nextState;
+      // Side effects HORS de l'updater
+      ch.send("question:result", {
+        questionId: q.id,
+        byToken: payload.playerToken,
+        chosenIdx: payload.chosenIdx,
+        correctIdx: q.correctIdx,
+        isCorrect,
+        explication: q.explication ?? null,
       });
+      void saveTvGameState({
+        roomId,
+        state: nextState,
+        status: isLast ? "ended" : undefined,
+      });
+      if (!isLast) {
+        window.setTimeout(() => broadcastCurrent(nextState), 3500);
+      } else {
+        ch.send("phase:change", { phase: "results" });
+      }
     });
 
     return () => {
@@ -401,6 +509,18 @@ export function TvHostRoom({
 
   // Cache local token → pseudo (rempli après mount via select sur la BDD)
   const tokenPseudoCache = useTokenPseudoCache(roomId, players);
+
+  // Vague R — Mode 12 Coups complet (3 phases enchaînées + duels + podium).
+  // Prend la priorité sur le legacy "playing" / face-à-face direct.
+  if (dcState) {
+    return (
+      <TvDouzeCoupsHost
+        code={code}
+        roomId={roomId}
+        initialState={dcState}
+      />
+    );
+  }
 
   // P5.1 — Si on est en face-à-face, on affiche cette vue
   if (faState) {
@@ -493,6 +613,14 @@ export function TvHostRoom({
               {code}
             </p>
           </div>
+          {/* Vague S4 — Boutons "Copier le lien" + "Partager" (Web Share API) */}
+          {joinUrl && status === "waiting" && (
+            <ShareLinkButtons
+              url={joinUrl}
+              title="Rejoins ma partie Mahylan Quiz !"
+              text={`Rejoins-moi avec le code ${code}`}
+            />
+          )}
           {roomModeKind === "remote" ? (
             <div className="flex flex-col items-center gap-1.5">
               <span className="rounded-full bg-sky/15 px-3 py-1 text-xs font-bold uppercase tracking-widest text-sky">
@@ -547,10 +675,22 @@ export function TvHostRoom({
               {playersWithPresence.map((p) => (
                 <li
                   key={p.id}
-                  className="flex items-center gap-3 rounded-xl border border-border bg-background/40 p-3"
+                  className={
+                    p.isBot
+                      ? "flex items-center gap-3 rounded-xl border border-sky/40 bg-sky/5 p-3"
+                      : "flex items-center gap-3 rounded-xl border border-border bg-background/40 p-3"
+                  }
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gold/15">
-                    {p.avatarUrl ? (
+                  <div
+                    className={
+                      p.isBot
+                        ? "flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-sky/15"
+                        : "flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gold/15"
+                    }
+                  >
+                    {p.isBot ? (
+                      <Bot className="h-6 w-6 text-sky" aria-hidden="true" />
+                    ) : p.avatarUrl ? (
                       <Image
                         src={p.avatarUrl}
                         alt=""
@@ -566,53 +706,99 @@ export function TvHostRoom({
                   <span className="flex-1 font-display text-lg font-bold text-foreground">
                     {p.pseudo}
                   </span>
-                  <span
-                    className={
-                      p.isConnected
-                        ? "rounded-full bg-life-green/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-life-green"
-                        : "rounded-full bg-buzz/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-buzz"
-                    }
-                  >
-                    {p.isConnected ? "En ligne" : "Hors ligne"}
-                  </span>
+                  {p.isBot ? (
+                    <>
+                      <span className="rounded-full bg-sky/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky">
+                        Bot
+                      </span>
+                      {status === "waiting" && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBot(p.token)}
+                          disabled={botBusy}
+                          aria-label={`Retirer ${p.pseudo}`}
+                          className="text-foreground/40 transition-colors hover:text-buzz disabled:opacity-50"
+                        >
+                          <MinusCircle className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <span
+                      className={
+                        p.isConnected
+                          ? "rounded-full bg-life-green/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-life-green"
+                          : "rounded-full bg-buzz/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-buzz"
+                      }
+                    >
+                      {p.isConnected ? "En ligne" : "Hors ligne"}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
           )}
 
+          {/* Vague S3 — Bouton "Ajouter un bot" + sélecteur de niveau.
+              Visible en lobby tant qu'on a moins de 8 joueurs. Permet
+              de compléter à 4 quand pas assez d'humains sont
+              connectés. Niveau : facile (40%) / moyen (70%) / difficile
+              (90%). */}
+          {status === "waiting" && playersWithPresence.length < 8 && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+              <button
+                type="button"
+                onClick={handleAddBot}
+                disabled={botBusy}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border-2 border-dashed border-sky/50 bg-card px-4 py-2 text-sm font-bold text-sky transition-all hover:-translate-y-px hover:border-sky hover:bg-sky/5 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {botBusy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Bot className="h-4 w-4" aria-hidden="true" />
+                )}
+                Ajouter un bot
+              </button>
+              <select
+                value={botSkillLevel}
+                onChange={(e) =>
+                  setBotSkillLevel(e.target.value as "easy" | "medium" | "hard")
+                }
+                disabled={botBusy}
+                aria-label="Niveau du bot"
+                className="rounded-md border-2 border-sky/30 bg-card px-3 py-2 text-sm font-semibold text-sky disabled:opacity-50"
+              >
+                <option value="easy">Facile (40%)</option>
+                <option value="medium">Moyen (70%)</option>
+                <option value="hard">Difficile (90%)</option>
+              </select>
+            </div>
+          )}
+
+          {/* S2 — Vague S : un seul bouton "Démarrer la partie" qui lance
+              le Mode 12 Coups TV (Coup d'Envoi → Coup par Coup →
+              Face-à-Face → Podium avec système de vies + duels). Les
+              modes legacy (handleStart) et face-à-face direct
+              (handleStartFaceAFace) restent disponibles côté code mais
+              ne sont plus exposés depuis l'UI. */}
           <Button
             variant="gold"
             size="lg"
-            disabled={!canStart || starting || status !== "waiting"}
-            onClick={handleStart}
+            disabled={!canStart || startingDc || status !== "waiting"}
+            onClick={handleStartDouzeCoups}
             className="mt-auto text-lg"
           >
-            {starting ? (
+            {startingDc ? (
               <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
             ) : (
               <Play className="h-5 w-5" aria-hidden="true" fill="currentColor" />
             )}
             {status === "playing" ? "Partie en cours…" : "Démarrer la partie"}
           </Button>
-          {/* P5.1 — Bouton "Lancer face-à-face" (alternative au mode regular). */}
-          {status === "waiting" && (
-            <button
-              type="button"
-              disabled={!canStart || startingFa}
-              onClick={handleStartFaceAFace}
-              className="inline-flex items-center justify-center gap-2 rounded-md border-2 border-sky/50 bg-card px-4 py-2 text-sm font-bold text-sky transition-all hover:-translate-y-px hover:border-sky hover:bg-sky/5 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {startingFa ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Mic className="h-4 w-4" aria-hidden="true" />
-              )}
-              Mode face-à-face (présentateur)
-            </button>
-          )}
           {!canStart && status === "waiting" && (
             <p className="text-center text-xs text-foreground/50">
-              Au moins 2 joueurs requis pour démarrer.
+              4 joueurs requis pour démarrer (ajoute des bots si moins
+              d&apos;humains).
             </p>
           )}
         </section>
@@ -688,13 +874,20 @@ function TvPlayingView({
   );
 
   // P4.1 — Animation "À toi, [Joueur]" 1.6s à chaque changement de tour.
+  //
+  // S1.1 — Bug corrigé : avant, on utilisait un `lastAnnouncedRef` pour
+  // dédupliquer. Mais en React 18 Strict Mode (dev), l'effect s'exécute
+  // deux fois consécutivement : le 1er run pose le ref, schedule le
+  // timer ; le cleanup annule le timer ; le 2e run voit le ref déjà
+  // posé et retourne tôt SANS planifier un nouveau timer → l'animation
+  // restait figée indéfiniment. Fix : retirer la dédup par ref. Les
+  // deps `[currentPlayerToken]` suffisent : l'effect ne re-run que si
+  // le token change réellement (en prod) ; en strict mode dev, le 2e
+  // run re-lance bien un timer après le cleanup du 1er.
   const [announcing, setAnnouncing] = useState(false);
-  const lastAnnouncedRef = useRef<string | null>(null);
   useEffect(() => {
     const tk = game.currentPlayerToken;
     if (!tk) return;
-    if (lastAnnouncedRef.current === tk) return;
-    lastAnnouncedRef.current = tk;
     setAnnouncing(true);
     const id = window.setTimeout(() => setAnnouncing(false), 1600);
     return () => window.clearTimeout(id);
