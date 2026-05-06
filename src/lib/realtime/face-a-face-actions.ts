@@ -1,10 +1,16 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { asJsonb } from "@/lib/supabase/jsonb";
 import type {
   FaceAFaceQuestion,
   FaceAFaceState,
 } from "./face-a-face-state";
+import {
+  parseQuizzAnswers,
+  requireRoomHost,
+  shuffle,
+} from "./tv-actions-helpers";
 
 /**
  * P5.1 — Server actions pour le mode face-à-face. L'hôte appelle
@@ -27,23 +33,12 @@ export interface PrepareFaInput {
 }
 
 export async function prepareFaceAFace(input: PrepareFaInput): Promise<
-  | { ok: true; state: FaceAFaceState }
+  | { ok: true; state: FaceAFaceState; version: number }
   | { ok: false; message: string }
 > {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, message: "Non authentifié." };
-
-  const { data: room } = await supabase
-    .from("tv_rooms")
-    .select("id, host_id")
-    .eq("id", input.roomId)
-    .maybeSingle();
-  if (!room || room.host_id !== user.id) {
-    return { ok: false, message: "Room introuvable ou non autorisée." };
-  }
+  const auth = await requireRoomHost(supabase, input.roomId);
+  if (!auth.ok) return auth;
 
   const poolSize = Math.min(Math.max(input.poolSize ?? 30, 10), 60);
 
@@ -60,23 +55,19 @@ export async function prepareFaceAFace(input: PrepareFaInput): Promise<
     return { ok: false, message: "Pas assez de questions en base." };
   }
 
-  const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, poolSize);
-  const questions: FaceAFaceQuestion[] = shuffled
+  const questions: FaceAFaceQuestion[] = shuffle(pool)
+    .slice(0, poolSize)
     .map((q) => {
-      const reponses = (q.reponses as unknown as Array<{
-        text: string;
-        correct?: boolean;
-      }>) ?? [];
-      const choices = reponses.map((r, idx) => ({ idx, text: r.text }));
-      const correctIdx = reponses.findIndex((r) => r.correct === true);
+      const parsed = parseQuizzAnswers(q.reponses);
+      if (!parsed) return null;
       return {
         id: q.id as string,
         enonce: q.enonce as string,
-        choices,
-        correctIdx: Math.max(0, correctIdx),
+        choices: parsed.choices,
+        correctIdx: Math.max(0, parsed.correctIdx),
       };
     })
-    .filter((q) => q.choices.length > 0);
+    .filter((q): q is FaceAFaceQuestion => q !== null);
 
   const timerSeconds = Math.max(20, Math.min(120, input.timerSeconds ?? 60));
   const timers: Record<string, number> = {};
@@ -97,37 +88,64 @@ export async function prepareFaceAFace(input: PrepareFaInput): Promise<
     winnerToken: null,
   };
 
+  // Vague T (#1) — Le démarrage du face-à-face suit un démarrage de partie
+  // (Mode 12 Coups) qui a déjà bumpé state_version. On lit la version
+  // actuelle et on remet à 0 si elle vient d'un cycle précédent.
+  const { data: cur } = await supabase
+    .from("tv_rooms")
+    .select("state_version")
+    .eq("id", input.roomId)
+    .maybeSingle();
+  const baseVersion = cur?.state_version ?? 0;
   await supabase
     .from("tv_rooms")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .update({ status: "playing", face_a_face_state: state as any })
+    .update({
+      status: "playing",
+      face_a_face_state: asJsonb(state),
+      state_version: baseVersion + 1,
+    })
     .eq("id", input.roomId)
-    .eq("host_id", user.id);
+    .eq("host_id", auth.ctx.userId);
 
-  return { ok: true, state };
+  return { ok: true, state, version: baseVersion + 1 };
 }
 
-/** Persiste l'état du face-à-face (best-effort, pour reconnexion). */
+/**
+ * Vague T (#1) — Persiste l'état du face-à-face avec optimistic locking
+ * (cf. saveDouzeCoupsState pour la logique). Retourne `{ ok: true,
+ * newVersion }` ou `{ ok: false, reason }`.
+ */
+export type SaveFaResult =
+  | { ok: true; newVersion: number }
+  | { ok: false; reason: "unauthorized" | "stale" };
+
 export async function saveFaceAFaceState(input: {
   roomId: string;
   state: FaceAFaceState;
   status?: "playing" | "ended";
-}): Promise<void> {
+  expectedVersion: number;
+}): Promise<SaveFaResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
-  await supabase
+  const auth = await requireRoomHost(supabase, input.roomId);
+  if (!auth.ok) return { ok: false, reason: "unauthorized" };
+
+  const newVersion = input.expectedVersion + 1;
+  const { count } = await supabase
     .from("tv_rooms")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .update({
-      face_a_face_state: input.state as any,
-      ...(input.status ? { status: input.status } : {}),
-      ...(input.status === "ended"
-        ? { ended_at: new Date().toISOString() }
-        : {}),
-    })
+    .update(
+      {
+        face_a_face_state: asJsonb(input.state),
+        state_version: newVersion,
+        ...(input.status ? { status: input.status } : {}),
+        ...(input.status === "ended"
+          ? { ended_at: new Date().toISOString() }
+          : {}),
+      },
+      { count: "exact" },
+    )
     .eq("id", input.roomId)
-    .eq("host_id", user.id);
+    .eq("host_id", auth.ctx.userId)
+    .eq("state_version", input.expectedVersion);
+  if ((count ?? 0) === 0) return { ok: false, reason: "stale" };
+  return { ok: true, newVersion };
 }

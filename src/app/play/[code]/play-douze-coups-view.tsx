@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
  * Vague R — Vue téléphone joueur pour le mode 12 Coups TV (étapes
  * Coup d'Envoi + Coup par Coup + duels). Dispatche selon les events
  * Realtime reçus :
- *  - ce:question-show → vue "joue" (boutons A/B/C/D)
+ *  - ce:question-show → vue "joue" (boutons A/B)
  *  - cpc:question-show → vue "joue" (intrus parmi 7)
  *  - ce:duel-start (challenger=moi)   → vue "choisis ton candidat"
  *  - ce:duel-candidate-selected (=moi) → attendre le tirage des thèmes
@@ -25,13 +25,26 @@ import { cn } from "@/lib/utils";
  *  - sinon → vue spectateur (regarde les autres jouer)
  *
  * Pas de logique métier ici : tout est piloté par la TV (arbitre).
+ *
+ * Vague U (#1.1) — `initialEvent` permet d'hydrater le state au mount à
+ * partir d'un event reçu AVANT que ce composant existe (race condition
+ * fix : le 1er `ce:question-show` arrivait avant le mount, l'event était
+ * perdu, l'utilisateur restait figé sur "En attente de la prochaine
+ * question…"). Si non-null, on replay l'event au mount pour bypass la
+ * race.
  */
+export type PlayDouzeCoupsInitialEvent =
+  | { kind: "ce-question"; payload: RoomEvents["ce:question-show"] }
+  | { kind: "cpc-question"; payload: RoomEvents["cpc:question-show"] }
+  | { kind: "duel-start"; payload: RoomEvents["ce:duel-start"] };
+
 export function PlayDouzeCoupsView({
   myToken,
   myPseudo,
   channel,
   // Liste de tous les joueurs (utile pour la sélection de candidat).
   players,
+  initialEvent = null,
 }: {
   myToken: string;
   myPseudo: string;
@@ -42,6 +55,7 @@ export function PlayDouzeCoupsView({
     avatarUrl: string | null;
     isEliminated: boolean;
   }>;
+  initialEvent?: PlayDouzeCoupsInitialEvent | null;
 }) {
   type PhaseKind =
     | "idle"
@@ -57,11 +71,34 @@ export function PlayDouzeCoupsView({
     | "duel-spectator"        // je regarde le duel
     | "duel-result";
 
-  const [phase, setPhase] = useState<PhaseKind>("idle");
-  const [question, setQuestion] = useState<RoomEvents["ce:question-show"] | null>(null);
+  // Vague U (#1.1) — Hydrate le state initial depuis l'event capturé
+  // par play-light-client AVANT que ce composant existe. Sans ça, le 1er
+  // event est perdu et le téléphone reste figé.
+  const initialPhase: PhaseKind = (() => {
+    if (!initialEvent) return "idle";
+    if (initialEvent.kind === "ce-question") {
+      return initialEvent.payload.currentPlayerToken === myToken
+        ? "ce-question"
+        : "ce-spectator";
+    }
+    if (initialEvent.kind === "cpc-question") {
+      return initialEvent.payload.currentPlayerToken === myToken
+        ? "cpc-question"
+        : "cpc-spectator";
+    }
+    // duel-start : si je suis le challenger → je dois choisir un candidat
+    return initialEvent.payload.challengerToken === myToken
+      ? "duel-pick-candidate"
+      : "duel-spectator";
+  })();
+
+  const [phase, setPhase] = useState<PhaseKind>(initialPhase);
+  const [question, setQuestion] = useState<RoomEvents["ce:question-show"] | null>(
+    initialEvent?.kind === "ce-question" ? initialEvent.payload : null,
+  );
   const [cpcQuestion, setCpcQuestion] = useState<
     RoomEvents["cpc:question-show"] | null
-  >(null);
+  >(initialEvent?.kind === "cpc-question" ? initialEvent.payload : null);
   const [duelThemes, setDuelThemes] = useState<
     RoomEvents["ce:duel-theme-proposals"]["themes"]
   >([]);
@@ -73,7 +110,16 @@ export function PlayDouzeCoupsView({
     challengerPseudo: string;
     candidateToken: string | null;
     candidatePseudo: string | null;
-  } | null>(null);
+  } | null>(
+    initialEvent?.kind === "duel-start"
+      ? {
+          challengerToken: initialEvent.payload.challengerToken,
+          challengerPseudo: initialEvent.payload.challengerPseudo,
+          candidateToken: null,
+          candidatePseudo: null,
+        }
+      : null,
+  );
   const [lastResult, setLastResult] = useState<
     | {
         chosenIdx: number;

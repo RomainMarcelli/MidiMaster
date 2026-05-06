@@ -1,17 +1,19 @@
 /**
  * Types générés à partir du schéma Supabase.
  *
- * Pour régénérer depuis la source (recommandé dès qu'on modifie une migration) :
+ * Régénération recommandée dès qu'on modifie une migration :
+ *   npm run gen-types
  *
- *   npx supabase gen types typescript --project-id <ton-project-id> --schema public > src/types/database.ts
+ * (équivalent à `supabase gen types typescript --project-id $SUPABASE_PROJECT_ID
+ * --schema public > src/types/database.ts` — voir scripts du package.json).
  *
- * ou en local si la CLI supabase est initialisée :
+ * Vague T — fichier mis à jour à la main pour couvrir TOUTES les migrations
+ * (0001 → 0018) en attendant que le user branche la CLI Supabase. Toute
+ * nouvelle colonne / table doit être reflétée ici (sinon `as any` revient).
  *
- *   npx supabase gen types typescript --local > src/types/database.ts
- *
- * Ce fichier est un PLACEHOLDER tapé à la main d'après supabase/migrations/0001_init.sql.
- * Il sera remplacé par une génération automatique dès que le user aura configuré
- * la CLI Supabase.
+ * Pour les UPDATE/INSERT de champs JSONB typés métier (TvDouzeCoupsState,
+ * FaceAFaceState, etc.), utiliser le helper `asJsonb()` de
+ * `@/lib/supabase/jsonb` plutôt qu'un `as any` éparpillé.
  */
 
 export type Json =
@@ -61,6 +63,10 @@ export interface Database {
           settings: Json;
           /** K4 — Branding conditionnel Mahylan vs générique. */
           is_owner: boolean;
+          /** E4.1 — Raccourcis clavier perso `{ context: { actionId: key } }`. */
+          keyboard_shortcuts: Json;
+          /** E4.2 — Préférences notifications mail/push. */
+          notification_settings: Json;
         };
         Insert: {
           id: string;
@@ -73,6 +79,8 @@ export interface Database {
           theme?: "light" | "dark" | "system";
           settings?: Json;
           is_owner?: boolean;
+          keyboard_shortcuts?: Json;
+          notification_settings?: Json;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
         Relationships: [];
@@ -179,6 +187,8 @@ export interface Database {
           face_a_face_state: Json | null;
           created_at: string;
           ended_at: string | null;
+          /** Vague T — Compteur monotone pour optimistic locking. */
+          state_version: number;
         };
         Insert: {
           id?: string;
@@ -191,6 +201,7 @@ export interface Database {
           face_a_face_state?: Json | null;
           created_at?: string;
           ended_at?: string | null;
+          state_version?: number;
         };
         Update: Partial<Database["public"]["Tables"]["tv_rooms"]["Insert"]>;
         Relationships: [];
@@ -207,6 +218,10 @@ export interface Database {
           is_remote: boolean;
           last_seen_at: string;
           joined_at: string;
+          /** Vague S3 — true si bot IA piloté côté serveur/TV. */
+          is_bot: boolean;
+          /** Vague S3 — taux de réussite cible 0..100 (default 70). */
+          bot_skill: number;
         };
         Insert: {
           id?: string;
@@ -219,6 +234,8 @@ export interface Database {
           is_remote?: boolean;
           last_seen_at?: string;
           joined_at?: string;
+          is_bot?: boolean;
+          bot_skill?: number;
         };
         Update: Partial<Database["public"]["Tables"]["tv_room_players"]["Insert"]>;
         Relationships: [];
@@ -399,6 +416,54 @@ export interface Database {
           obtained_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["user_badges"]["Insert"]>;
+        Relationships: [];
+      };
+      periodic_elements: {
+        Row: {
+          numero_atomique: number;
+          symbole: string;
+          nom: string;
+          periode: number;
+          groupe: number | null;
+          row_grid: number;
+          col_grid: number;
+          famille: string;
+          masse_atomique: number | null;
+          phase_standard: string | null;
+          decouverte_annee: number | null;
+          decouverte_par: string | null;
+          configuration_electronique: string | null;
+          electronegativite: number | null;
+          rayon_atomique: number | null;
+          temperature_fusion: number | null;
+          temperature_ebullition: number | null;
+          densite: number | null;
+          anecdote: string | null;
+        };
+        Insert: {
+          numero_atomique: number;
+          symbole: string;
+          nom: string;
+          periode: number;
+          groupe?: number | null;
+          row_grid: number;
+          col_grid: number;
+          famille: string;
+          masse_atomique?: number | null;
+          phase_standard?: string | null;
+          decouverte_annee?: number | null;
+          decouverte_par?: string | null;
+          configuration_electronique?: string | null;
+          electronegativite?: number | null;
+          rayon_atomique?: number | null;
+          temperature_fusion?: number | null;
+          temperature_ebullition?: number | null;
+          densite?: number | null;
+          anecdote?: string | null;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["periodic_elements"]["Insert"]
+        >;
         Relationships: [];
       };
     };

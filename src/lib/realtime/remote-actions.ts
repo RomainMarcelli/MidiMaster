@@ -68,6 +68,8 @@ export async function addRemotePlayer(input: {
   }
   const supabase = createClient();
   const token = generatePlayerToken();
+  // Vague T (#6) — On n'écrit plus `is_connected` (presence WS = source
+  // de vérité). Le DEFAULT TRUE en BDD reste pour les anciens consommateurs.
   const { data, error } = await supabase
     .from("tv_room_players")
     .insert({
@@ -75,7 +77,6 @@ export async function addRemotePlayer(input: {
       player_token: token,
       pseudo: input.pseudo.trim(),
       avatar_url: input.avatarUrl ?? null,
-      is_connected: true,
       is_remote: true,
     })
     .select("id")

@@ -65,8 +65,7 @@ export async function fetchAllUsers(opts: {
   try {
     const { data: sessions } = await admin
       .from("game_sessions")
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .select("user_id, created_at" as any)
+      .select("user_id, created_at")
       .returns<Array<{ user_id: string; created_at: string }>>();
     for (const s of sessions ?? []) {
       const cur = gamesByUser.get(s.user_id) ?? { count: 0, lastAt: null };

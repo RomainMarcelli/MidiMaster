@@ -30,10 +30,12 @@ export default async function TvHostRoomPage({
     redirect("/tv/host");
   }
 
-  // Joueurs déjà connectés (charge initial, puis Realtime prend le relais)
+  // Joueurs déjà connectés (charge initial, puis Realtime prend le relais).
+  // Vague T (#6) — On ne SELECT plus `is_connected` : la connectivité vient
+  // exclusivement de la presence WS côté client.
   const { data: players } = await supabase
     .from("tv_room_players")
-    .select("id, pseudo, avatar_url, is_connected, joined_at, player_token")
+    .select("id, pseudo, avatar_url, joined_at, player_token, is_bot, bot_skill")
     .eq("room_id", room.id)
     .order("joined_at", { ascending: true });
 
@@ -67,6 +69,8 @@ export default async function TvHostRoomPage({
         joinedAt: p.joined_at,
         // P1.1 — token nécessaire pour cross-ref BDD ↔ Presence côté TV.
         token: p.player_token as string,
+        isBot: p.is_bot,
+        botSkill: p.bot_skill,
       }))}
       initialStatus={room.status as "waiting" | "playing" | "paused" | "ended"}
       quizPreview={

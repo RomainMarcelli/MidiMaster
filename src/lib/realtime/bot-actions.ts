@@ -9,6 +9,7 @@ import {
   validateBotAdd,
   validateBotRemove,
 } from "./bot-actions-helpers";
+import { pickRandomBotAvatarUrl } from "@/lib/avatars/presets";
 
 /**
  * Vague S3 — Server actions pour gérer les bots IA dans une room TV.
@@ -86,19 +87,20 @@ export async function addBotToRoom(input: {
   const pseudo = computeNextBotPseudo(existingArr);
   const token = `bot:${randomUUID()}`;
   const skill = clampBotSkill(input.botSkill ?? BOT_ROOM_LIMITS.DEFAULT_SKILL);
+  // Vague U (#5) — Avatar préset aléatoire pour rendre les bots plus
+  // attrayants visuellement (avant : icône Lucide générique).
+  const avatarUrl = pickRandomBotAvatarUrl();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const insertPayload: any = {
-    room_id: input.roomId,
-    player_token: token,
-    pseudo,
-    avatar_url: null,
-    is_bot: true,
-    bot_skill: skill,
-  };
   const { data, error } = await supabase
     .from("tv_room_players")
-    .insert(insertPayload)
+    .insert({
+      room_id: input.roomId,
+      player_token: token,
+      pseudo,
+      avatar_url: avatarUrl,
+      is_bot: true,
+      bot_skill: skill,
+    })
     .select("id, player_token, pseudo, avatar_url")
     .single();
   if (error || !data) {

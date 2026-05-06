@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Crown, Loader2, Mic, Swords, Timer, Trophy, X } from "lucide-react";
 import Image from "next/image";
@@ -17,11 +17,19 @@ import {
   type FaceAFaceQuestion,
   type FaceAFaceState,
 } from "@/lib/realtime/face-a-face-state";
+import {
+  faAnswerSchema,
+  faGoSchema,
+  faVoteCastSchema,
+  safeParseEvent,
+} from "@/lib/realtime/room-events-schemas";
 
 interface TvFaceAFaceViewProps {
   code: string;
   roomId: string;
   initialState: FaceAFaceState;
+  /** Vague T (#1) — Version courante du state pour optimistic locking. */
+  initialVersion: number;
   players: Array<{
     id: string;
     pseudo: string;
@@ -47,13 +55,37 @@ export function TvFaceAFaceView({
   code,
   roomId,
   initialState,
+  initialVersion,
   players,
   onEnd,
 }: TvFaceAFaceViewProps) {
   const [state, setState] = useState<FaceAFaceState>(initialState);
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Vague T (#1) — Version pour optimistic locking. On consomme et on
+  // bumpe à chaque save (cf. helper `persistFa`).
+  const versionRef = useRef(initialVersion);
   const channelRef = useRef<TvChannelHandle | null>(null);
+
+  // Helper local : encapsule l'optimistic save + tracking de version.
+  const persistFa = useCallback(
+    (next: FaceAFaceState, status?: "playing" | "ended") => {
+      const expected = versionRef.current;
+      void saveFaceAFaceState({
+        roomId,
+        state: next,
+        status,
+        expectedVersion: expected,
+      }).then((res) => {
+        if (res.ok) versionRef.current = res.newVersion;
+        else if (res.reason === "stale") {
+          // eslint-disable-next-line no-console
+          console.warn(`[saveFaceAFaceState] stale write (expected v=${expected})`);
+        }
+      });
+    },
+    [roomId],
+  );
 
   // Connexion + listeners
   useEffect(() => {
@@ -66,7 +98,10 @@ export function TvFaceAFaceView({
       finalistPseudos: state.finalistPseudos,
     });
 
-    ch.on("fa:vote-cast", (payload) => {
+    // Vague T (#4) — Validation Zod à la réception
+    ch.on("fa:vote-cast", (raw) => {
+      const payload = safeParseEvent("fa:vote-cast", faVoteCastSchema, raw);
+      if (!payload) return;
       setState((prev) => {
         if (prev.phase !== "vote") return prev;
         if (!prev.finalists.includes(payload.forToken)) return prev;
@@ -78,8 +113,9 @@ export function TvFaceAFaceView({
       });
     });
 
-    ch.on("fa:go", (payload) => {
-      // Le présentateur démarre le timer
+    ch.on("fa:go", (raw) => {
+      const payload = safeParseEvent("fa:go", faGoSchema, raw);
+      if (!payload) return;
       setState((prev) => {
         if (prev.phase !== "playing") return prev;
         if (payload.presenterToken !== prev.presenterToken) return prev;
@@ -87,8 +123,9 @@ export function TvFaceAFaceView({
       });
     });
 
-    ch.on("fa:answer", (payload) => {
-      // Le présentateur a validé une réponse
+    ch.on("fa:answer", (raw) => {
+      const payload = safeParseEvent("fa:answer", faAnswerSchema, raw);
+      if (!payload) return;
       setState((prev) => {
         if (prev.phase !== "playing") return prev;
         if (payload.presenterToken !== prev.presenterToken) return prev;
@@ -149,11 +186,7 @@ export function TvFaceAFaceView({
             winnerToken: winner,
             loserToken: tk,
           });
-          void saveFaceAFaceState({
-            roomId,
-            state: next,
-            status: "ended",
-          });
+          persistFa(next, "ended");
           return next;
         }
         return { ...prev, timers: newTimers };
@@ -196,7 +229,7 @@ export function TvFaceAFaceView({
           timers: prev.timers,
         });
       }
-      void saveFaceAFaceState({ roomId, state: next, status: "playing" });
+      persistFa(next, "playing");
       return next;
     });
   }

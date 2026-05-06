@@ -20,7 +20,10 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { PlayProfileEditModal } from "../play-profile-edit-modal";
 import { PlayFaceAFaceView } from "../play-face-a-face-view";
-import { PlayDouzeCoupsView } from "../play-douze-coups-view";
+import {
+  PlayDouzeCoupsView,
+  type PlayDouzeCoupsInitialEvent,
+} from "../play-douze-coups-view";
 import { AnswerButtons } from "@/components/tv/AnswerButtons";
 import { RoomClosedOverlay } from "@/components/tv/RoomClosedOverlay";
 
@@ -69,7 +72,13 @@ export function PlayLightClient({
   // Vague R — Bascule en vue 12 Coups TV (Coup d'Envoi / Coup par Coup /
   // duels) dès qu'on reçoit le premier event dc:* depuis la TV. Liste des
   // joueurs chargée depuis la BDD (utile pour la sélection de candidat duel).
+  // Vague U (#1.1) — On capture l'event qui déclenche dcMode pour
+  // l'hydrater dans PlayDouzeCoupsView au mount (sinon il est perdu :
+  // PlayDouzeCoupsView mount APRÈS le 1er ce:question-show et bind ses
+  // listeners trop tard).
   const [dcMode, setDcMode] = useState(false);
+  const [dcInitialEvent, setDcInitialEvent] =
+    useState<PlayDouzeCoupsInitialEvent | null>(null);
   const [dcPlayers, setDcPlayers] = useState<
     Array<{
       token: string;
@@ -253,10 +262,29 @@ export function PlayLightClient({
 
     // Vague R — Bascule en vue 12 Coups TV dès qu'on reçoit n'importe
     // quel event de la phase Coup d'Envoi / Coup par Coup / duels.
-    // PlayDouzeCoupsView reposera ses propres listeners en plus.
-    ch.on("ce:question-show", () => setDcMode(true));
-    ch.on("cpc:question-show", () => setDcMode(true));
-    ch.on("ce:duel-start", () => setDcMode(true));
+    // Vague U (#1.1) — On capture aussi l'event lui-même pour le passer
+    // en `initialEvent` à PlayDouzeCoupsView (qui mount APRÈS le bascule
+    // et perdrait sinon le 1er event). On ne setDcInitialEvent qu'une
+    // SEULE fois (le 1er) — les events suivants sont reçus par
+    // PlayDouzeCoupsView via ses propres listeners.
+    ch.on("ce:question-show", (payload) => {
+      setDcMode(true);
+      setDcInitialEvent((prev) =>
+        prev ?? { kind: "ce-question", payload },
+      );
+    });
+    ch.on("cpc:question-show", (payload) => {
+      setDcMode(true);
+      setDcInitialEvent((prev) =>
+        prev ?? { kind: "cpc-question", payload },
+      );
+    });
+    ch.on("ce:duel-start", (payload) => {
+      setDcMode(true);
+      setDcInitialEvent((prev) =>
+        prev ?? { kind: "duel-start", payload },
+      );
+    });
 
     // Q3.1 — L'hôte a fermé la partie : bascule sur l'overlay redirect
     ch.on("room:closed", () => {
@@ -359,6 +387,7 @@ export function PlayLightClient({
           myPseudo={pseudo || "..."}
           channel={channelRef.current}
           players={dcPlayers}
+          initialEvent={dcInitialEvent}
         />
         <RoomClosedOverlay visible={roomClosed} />
       </>

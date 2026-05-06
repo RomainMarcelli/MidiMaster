@@ -153,7 +153,7 @@ export interface RoomEvents {
   // ==========================================================================
   // Vague R — Mode 12 Coups TV (Coup d'Envoi + Coup par Coup + duels)
   // ==========================================================================
-  /** Broadcast d'une nouvelle question Coup d'Envoi (quizz_4). */
+  /** Broadcast d'une nouvelle question Coup d'Envoi (quizz_2 — boutons A/B). */
   "ce:question-show": {
     questionId: string;
     enonce: string;

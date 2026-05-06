@@ -121,8 +121,7 @@ export async function GET(req: NextRequest) {
   // facilement par sous-clé en PostgREST).
   const { data: profiles, error: profilesErr } = await supabase
     .from("profiles")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .select("id, pseudo, notification_settings" as any)
+    .select("id, pseudo, notification_settings")
     .returns<
       Array<{
         id: string;
@@ -183,10 +182,13 @@ export async function GET(req: NextRequest) {
   // continue silencieusement si la table n'existe pas).
   let playedToday = new Set<string>();
   try {
+    // `game_history` n'est pas dans le schéma TS (table optionnelle —
+     // peut ne pas exister selon l'environnement). On la requête de façon
+     // défensive avec un cast `as never` qui désactive le check sur le
+     // nom de table.
     const { data: plays } = await supabase
-      .from("game_history")
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .select("user_id" as any)
+      .from("game_history" as never)
+      .select("user_id")
       .gte("created_at", `${todayIso}T00:00:00Z`)
       .returns<PlayedTodayRow[]>();
     if (plays) playedToday = new Set(plays.map((p) => p.user_id));

@@ -45,8 +45,9 @@ export function TvCoupParCoupView({
     <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
       {/* Sidebar joueurs avec barres de vie + animations Vague S6 */}
       <aside className="flex flex-col gap-3">
+        {/* Vague U (#8) — Numéro de partie déjà dans le header principal. */}
         <p className="text-xs font-bold uppercase tracking-widest text-buzz">
-          Coup par Coup · Partie {code}
+          Coup par Coup
         </p>
         {players.map((p) => (
           <TvPlayerLifeCard

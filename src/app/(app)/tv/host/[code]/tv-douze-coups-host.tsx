@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { X } from "lucide-react";
+import { SkipForward, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { joinTvChannel, type TvChannelHandle } from "@/lib/realtime/tv-channel";
@@ -14,19 +14,22 @@ import {
   saveDouzeCoupsState,
 } from "@/lib/realtime/tv-douze-coups-actions";
 import {
-  applyAnswerToPlayer,
   buildFinalRanking,
   isCpcQuestion,
   isQuizzQuestion,
-  markFinalists,
-  nextActivePlayerIdx,
-  resolveDuel,
   type CpcQuestion,
-  type DcPlayer,
   type DuelTheme,
   type QuizzQuestion,
   type TvDouzeCoupsState,
 } from "@/lib/realtime/tv-douze-coups-state";
+import {
+  advanceTurn,
+  applyAnswer,
+  applyDuelAnswer,
+  applyDuelCandidateSelection,
+  applyDuelThemeSelection,
+  endEliminationAnimation,
+} from "./tv-douze-coups-machine-helpers";
 import { endTvRoom } from "@/lib/realtime/room-actions";
 import {
   isBotToken,
@@ -43,6 +46,15 @@ import { EliminationOverlay } from "@/components/tv/EliminationOverlay";
 import { prepareFaceAFace } from "@/lib/realtime/face-a-face-actions";
 import type { FaceAFaceState } from "@/lib/realtime/face-a-face-state";
 import { TvFaceAFaceView } from "./tv-face-a-face-view";
+import {
+  ceAnswerSubmitSchema,
+  ceDuelAnswerSubmitSchema,
+  ceDuelCandidateSelectedSchema,
+  ceDuelThemeChosenSchema,
+  cpcAnswerSubmitSchema,
+  faEndSchema,
+  safeParseEvent,
+} from "@/lib/realtime/room-events-schemas";
 
 /**
  * Vague R — Orchestrateur TV du mode "12 Coups". Reçoit l'état initial
@@ -66,15 +78,21 @@ export function TvDouzeCoupsHost({
   code,
   roomId,
   initialState,
+  initialVersion = 0,
 }: {
   code: string;
   roomId: string;
   initialState: TvDouzeCoupsState;
+  /** Vague T (#1) — Version initiale du state en BDD (0 au premier mount). */
+  initialVersion?: number;
 }) {
   const router = useRouter();
   const [state, setState] = useState<TvDouzeCoupsState>(initialState);
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Vague T (#1) — Suivi de la version pour optimistic concurrency.
+  // Incrémentée à chaque save réussi (renvoyé par le server action).
+  const versionRef = useRef(initialVersion);
   const channelRef = useRef<TvChannelHandle | null>(null);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [ending, setEnding] = useState(false);
@@ -104,7 +122,23 @@ export function TvDouzeCoupsHost({
       const next = updater(stateRef.current);
       stateRef.current = next;
       setState(next);
-      void saveDouzeCoupsState({ roomId, state: next });
+      // Vague T (#1) — On capture la version courante pour le UPDATE
+      // optimiste. Si le save échoue (`stale`), on log mais on ne crash
+      // pas l'orchestrateur (le state local reste cohérent ; au pire on
+      // perd un save intermédiaire — la prochaine transition réécrira).
+      const expected = versionRef.current;
+      void saveDouzeCoupsState({ roomId, state: next, expectedVersion: expected })
+        .then((res) => {
+          if (res.ok) {
+            versionRef.current = res.newVersion;
+          } else if (res.reason === "stale") {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[saveDouzeCoupsState] stale write (expected v=${expected}). ` +
+                `Le state local reste — la prochaine transition réécrira.`,
+            );
+          }
+        });
     },
     [roomId],
   );
@@ -178,101 +212,10 @@ export function TvDouzeCoupsHost({
     }
   }, []);
 
-  // ============================================================
-  // Avance au prochain joueur (en sautant les éliminés). NE FAIT
-  // PAS de transition de phase — c'est `transitionAfterElimination`
-  // qui s'en charge UNIQUEMENT après une élimination effective.
-  //
-  // S1.2 — Bug corrigé : avant, advanceTurn vérifiait `alive.length
-  // <= 3` à chaque tour. Avec une partie démarrée à 2 ou 3 joueurs,
-  // cette condition était vraie dès la 1ère réponse correcte → on
-  // basculait en CPC, puis FA, puis podium en cascade.
-  // Désormais : advanceTurn ne fait QUE l'avancement de tour de
-  // table normal. Les transitions de phase sont déclenchées
-  // explicitement par transitionAfterElimination().
-  // ============================================================
-  const advanceTurn = useCallback(
-    (s: TvDouzeCoupsState): TvDouzeCoupsState => {
-      const nextIdx = nextActivePlayerIdx(
-        s.currentPlayerIdx,
-        s.turnOrder,
-        s.players,
-      );
-      if (s.phase === "coup-envoi-playing") {
-        const nextQuestion = s.questionPool.coupEnvoi[0] ?? null;
-        return {
-          ...s,
-          currentPlayerIdx: nextIdx === -1 ? s.currentPlayerIdx : nextIdx,
-          currentQuestion: nextQuestion,
-          questionPool: {
-            ...s.questionPool,
-            coupEnvoi: s.questionPool.coupEnvoi.slice(1),
-          },
-        };
-      }
-      const nextQuestion = s.questionPool.coupParCoup[0] ?? null;
-      return {
-        ...s,
-        currentPlayerIdx: nextIdx === -1 ? s.currentPlayerIdx : nextIdx,
-        currentQuestion: nextQuestion,
-        questionPool: {
-          ...s.questionPool,
-          coupParCoup: s.questionPool.coupParCoup.slice(1),
-        },
-      };
-    },
-    [],
-  );
-
-  /**
-   * Décide si une élimination doit déclencher un changement de phase.
-   * Appelée APRÈS une élimination effective (handleDuelAnswer avec
-   * candidat correct). Règles :
-   *  - Phase Coup d'Envoi : 1 éliminé → 3 survivants → CPC
-   *  - Phase Coup par Coup : 1 éliminé → 2 survivants → Face-à-Face
-   *
-   * Retourne le state mis à jour avec la nouvelle phase, OU `null`
-   * si pas de transition (la partie continue dans la même phase).
-   */
-  const transitionAfterElimination = useCallback(
-    (s: TvDouzeCoupsState): TvDouzeCoupsState | null => {
-      const alive = s.players.filter((p) => !p.isEliminated);
-      // CE → CPC : on a perdu un joueur en CE, il en reste 3 (ou moins)
-      if (
-        (s.phase === "coup-envoi-playing" ||
-          s.phase === "coup-envoi-elimination") &&
-        alive.length <= 3
-      ) {
-        const newTurnOrder = alive.map((p) => p.token);
-        const firstQ = s.questionPool.coupParCoup[0] ?? null;
-        return {
-          ...s,
-          phase: "coup-par-coup-playing",
-          turnOrder: newTurnOrder,
-          currentPlayerIdx: 0,
-          currentQuestion: firstQ,
-          questionPool: {
-            ...s.questionPool,
-            coupParCoup: s.questionPool.coupParCoup.slice(1),
-          },
-        };
-      }
-      // CPC → FA : on a perdu un joueur en CPC, il en reste 2
-      if (
-        (s.phase === "coup-par-coup-playing" ||
-          s.phase === "coup-par-coup-elimination") &&
-        alive.length <= 2
-      ) {
-        return {
-          ...s,
-          phase: "face-a-face-vote",
-          players: markFinalists(s.players),
-        };
-      }
-      return null;
-    },
-    [],
-  );
+  // Vague T (#3) — Les transitions pures (advanceTurn,
+  // transitionAfterElimination, applyAnswer, applyDuelAnswer, etc.) sont
+  // dans `tv-douze-coups-machine-helpers.ts` (testées en isolation, 22
+  // tests). Ce composant n'orchestre plus que les side effects.
 
   // ============================================================
   // Gestion d'une réponse à une question normale (Coup d'Envoi
@@ -288,22 +231,14 @@ export function TvDouzeCoupsHost({
     ) => {
       const ch = channelRef.current;
       if (!ch) return;
-      const s = stateRef.current;
-      const expectedToken = s.turnOrder[s.currentPlayerIdx];
-      if (payload.playerToken !== expectedToken) return;
-      const q = s.currentQuestion;
-      if (!q || q.id !== payload.questionId) return;
+      const result = applyAnswer(stateRef.current, payload, kind);
+      if (result.kind !== "accepted") return;
+      const { isCorrect, correctIdx, next, triggersDuel, challengerPseudo } = result;
 
-      const correctIdx = isQuizzQuestion(q) ? q.correctIdx : q.intrusIdx;
-      const isCorrect = payload.chosenIdx === correctIdx;
-      const player = s.players.find((p) => p.token === payload.playerToken);
-      if (!player) return;
-      const updatedPlayer = applyAnswerToPlayer(player, isCorrect);
-
-      // Broadcast résultat
+      // Broadcast résultat (typage des events distinct entre ce: et cpc:)
       if (kind === "ce") {
         ch.send("ce:question-result", {
-          questionId: q.id,
+          questionId: payload.questionId,
           byToken: payload.playerToken,
           chosenIdx: payload.chosenIdx,
           correctIdx,
@@ -311,7 +246,7 @@ export function TvDouzeCoupsHost({
         });
       } else {
         ch.send("cpc:question-result", {
-          questionId: q.id,
+          questionId: payload.questionId,
           byToken: payload.playerToken,
           chosenIdx: payload.chosenIdx,
           intrusIdx: correctIdx,
@@ -319,45 +254,27 @@ export function TvDouzeCoupsHost({
         });
       }
 
-      // Patch joueur dans state
-      const playersAfter = s.players.map((p) =>
-        p.token === payload.playerToken ? updatedPlayer : p,
-      );
-      const justWentRed =
-        player.lifeStatus !== "red" && updatedPlayer.lifeStatus === "red";
+      // Persiste le state
+      updateAndSave(() => next);
 
-      if (justWentRed) {
-        // Démarrer un duel : phase change immédiatement, broadcast ce:duel-start
-        const duelPhase =
-          kind === "ce"
-            ? "coup-envoi-duel-select"
-            : "coup-par-coup-duel-select";
-        updateAndSave((prev) => ({
-          ...prev,
-          players: playersAfter,
-          phase: duelPhase,
-          currentDuel: {
-            challengerToken: payload.playerToken,
-            candidateToken: null,
-            proposedThemes: [],
-            chosenThemeId: null,
-            question: null,
-          },
-        }));
+      if (triggersDuel) {
         ch.send("ce:duel-start", {
           challengerToken: payload.playerToken,
-          challengerPseudo: updatedPlayer.pseudo,
+          challengerPseudo: challengerPseudo ?? "?",
         });
         // Vague S3 — Si le challenger (joueur rouge) est un bot, il
         // choisit automatiquement un candidat parmi les vivants ≠ lui.
-        if (updatedPlayer.isBot || isBotToken(payload.playerToken)) {
-          const candidates = playersAfter.map((p) => ({
+        const challenger = next.players.find(
+          (p) => p.token === payload.playerToken,
+        );
+        if (challenger && (challenger.isBot || isBotToken(payload.playerToken))) {
+          const candidates = next.players.map((p) => ({
             token: p.token,
             isEliminated: p.isEliminated,
           }));
           const candToken = pickBotDuelCandidate(candidates, payload.playerToken);
           if (candToken) {
-            const cand = playersAfter.find((p) => p.token === candToken);
+            const cand = next.players.find((p) => p.token === candToken);
             if (cand) {
               const delay = pickBotDelayMs(undefined, 1500, 2500);
               window.setTimeout(() => {
@@ -371,19 +288,18 @@ export function TvDouzeCoupsHost({
           }
         }
       } else {
-        // Patch d'abord, puis avance au tour suivant après délai
-        updateAndSave((prev) => ({ ...prev, players: playersAfter }));
+        // Pas de duel : avance au tour suivant après le délai d'affichage
+        // du résultat.
         window.setTimeout(() => {
           updateAndSave((prev) => {
             const advanced = advanceTurn(prev);
-            // Broadcast la prochaine question dans le frame suivant
             window.setTimeout(() => broadcastCurrent(advanced), 0);
             return advanced;
           });
         }, RESULT_DELAY_MS);
       }
     },
-    [updateAndSave, advanceTurn, broadcastCurrent],
+    [updateAndSave, broadcastCurrent],
   );
 
   // ============================================================
@@ -402,21 +318,9 @@ export function TvDouzeCoupsHost({
       if (!ch) return;
       // Tire 2 thèmes via server action (tirage côté serveur)
       const themes = await pickDuelThemesAction(code);
-      const themePhase =
-        stateRef.current.phase === "coup-envoi-duel-select"
-          ? "coup-envoi-duel-theme"
-          : "coup-par-coup-duel-theme";
-      updateAndSave((prev) => ({
-        ...prev,
-        phase: themePhase,
-        currentDuel: prev.currentDuel
-          ? {
-              ...prev.currentDuel,
-              candidateToken: payload.candidateToken,
-              proposedThemes: themes,
-            }
-          : null,
-      }));
+      updateAndSave((prev) =>
+        applyDuelCandidateSelection(prev, payload.candidateToken, themes),
+      );
       ch.send("ce:duel-theme-proposals", {
         candidateToken: payload.candidateToken,
         themes,
@@ -453,21 +357,7 @@ export function TvDouzeCoupsHost({
       if (!ch) return;
       const q = await pickDuelQuestion(payload.themeId);
       if (!q) return;
-      const questionPhase =
-        stateRef.current.phase === "coup-envoi-duel-theme"
-          ? "coup-envoi-duel-question"
-          : "coup-par-coup-duel-question";
-      updateAndSave((prev) => ({
-        ...prev,
-        phase: questionPhase,
-        currentDuel: prev.currentDuel
-          ? {
-              ...prev.currentDuel,
-              chosenThemeId: payload.themeId,
-              question: q,
-            }
-          : null,
-      }));
+      updateAndSave((prev) => applyDuelThemeSelection(prev, payload.themeId, q));
       ch.send("ce:duel-question", {
         questionId: q.id,
         enonce: q.enonce,
@@ -502,105 +392,53 @@ export function TvDouzeCoupsHost({
     }) => {
       const ch = channelRef.current;
       if (!ch) return;
-      const s = stateRef.current;
-      const duel = s.currentDuel;
-      if (!duel || !duel.question || duel.question.id !== payload.questionId) {
-        return;
-      }
-      if (payload.candidateToken !== duel.candidateToken) return;
-      const candidateCorrect = payload.chosenIdx === duel.question.correctIdx;
-      const phaseKind = s.phase.startsWith("coup-envoi") ? "coup-envoi" : "coup-par-coup";
-      const playersAfter = resolveDuel(
-        s.players,
-        duel.challengerToken,
-        duel.candidateToken,
-        candidateCorrect,
-        phaseKind,
-      );
-      const challengerEliminated = !!playersAfter.find(
-        (p) => p.token === duel.challengerToken,
-      )?.isEliminated;
+      const result = applyDuelAnswer(stateRef.current, payload, {
+        eliminationDurationMs: ELIM_ANIM_MS,
+      });
+      if (result.kind !== "accepted") return;
+      const { candidateCorrect, correctIdx, challengerEliminated, next, phaseKind } =
+        result;
 
+      // Broadcast résultat
       ch.send("ce:duel-result", {
-        questionId: duel.question.id,
-        candidateToken: duel.candidateToken,
-        challengerToken: duel.challengerToken,
+        questionId: payload.questionId,
+        candidateToken: payload.candidateToken,
+        challengerToken: stateRef.current.currentDuel?.challengerToken ?? "",
         chosenIdx: payload.chosenIdx,
-        correctIdx: duel.question.correctIdx,
+        correctIdx,
         candidateCorrect,
         challengerEliminated,
       });
 
+      // Persiste le state (post-duel : soit phase elimination, soit retour playing)
+      updateAndSave(() => next);
+
       if (challengerEliminated) {
-        // Animation d'élimination 4.5s, puis transition de phase
-        const eliminated = playersAfter.find(
-          (p) => p.token === duel.challengerToken,
-        )!;
-        const elimPhase =
-          phaseKind === "coup-envoi"
-            ? "coup-envoi-elimination"
-            : "coup-par-coup-elimination";
-        updateAndSave((prev) => ({
-          ...prev,
-          players: playersAfter,
-          currentDuel: null,
-          phase: elimPhase,
-          eliminationAnimation: {
-            token: duel.challengerToken,
-            startedAt: Date.now(),
-            durationMs: ELIM_ANIM_MS,
-          },
-        }));
+        // Broadcast l'événement d'élimination + lance l'animation 4.5s
         ch.send("ce:elimination", {
-          eliminatedToken: duel.challengerToken,
-          eliminatedPseudo: eliminated.pseudo,
+          eliminatedToken: stateRef.current.currentDuel?.challengerToken ?? "",
+          eliminatedPseudo: result.eliminatedPseudo ?? "?",
           fromPhase: phaseKind,
           nextPhase: phaseKind === "coup-envoi" ? "coup-par-coup" : "face-a-face",
         });
         window.setTimeout(() => {
-          // Après élimination effective : on tente une transition de
-          // phase (CE→CPC ou CPC→FA). Si pas de transition (cas où on
-          // a éliminé un joueur mais on est encore au-dessus du seuil),
-          // on reste dans la phase et on avance le tour normalement.
-          const back: TvDouzeCoupsState = {
-            ...stateRef.current,
-            phase:
-              phaseKind === "coup-envoi"
-                ? "coup-envoi-playing"
-                : "coup-par-coup-playing",
-            eliminationAnimation: null,
-          };
-          const transitioned = transitionAfterElimination(back);
-          const next = transitioned ?? advanceTurn(back);
-          stateRef.current = next;
-          setState(next);
-          void saveDouzeCoupsState({ roomId, state: next });
-          window.setTimeout(() => broadcastCurrent(next), 0);
+          // Fin d'animation : retour playing puis tente une transition de
+          // phase (CE→CPC ou CPC→FA), sinon on avance le tour normalement.
+          updateAndSave((prev) => endEliminationAnimation(prev).next);
+          window.setTimeout(() => broadcastCurrent(stateRef.current), 0);
         }, ELIM_ANIM_MS);
       } else {
         // Le challenger survit, retour direct au tour suivant après le délai
-        updateAndSave((prev) => ({
-          ...prev,
-          players: playersAfter,
-          currentDuel: null,
-        }));
         window.setTimeout(() => {
-          const back: TvDouzeCoupsState = {
-            ...stateRef.current,
-            phase:
-              phaseKind === "coup-envoi"
-                ? "coup-envoi-playing"
-                : "coup-par-coup-playing",
-          };
-          const advanced = advanceTurn(back);
-          stateRef.current = advanced;
-          setState(advanced);
-          void saveDouzeCoupsState({ roomId, state: advanced });
-          window.setTimeout(() => broadcastCurrent(advanced), 0);
+          updateAndSave((prev) => {
+            const advanced = advanceTurn(prev);
+            window.setTimeout(() => broadcastCurrent(advanced), 0);
+            return advanced;
+          });
         }, RESULT_DELAY_MS);
       }
     },
-    [updateAndSave, advanceTurn, broadcastCurrent, transitionAfterElimination, roomId],
+    [updateAndSave, broadcastCurrent],
   );
 
   // ============================================================
@@ -617,7 +455,16 @@ export function TvDouzeCoupsHost({
         finalRanking: ranking,
       };
       setState(next);
-      void finalizeDouzeCoupsTv({ roomId, state: s, winnerToken });
+      stateRef.current = next;
+      const expected = versionRef.current;
+      void finalizeDouzeCoupsTv({
+        roomId,
+        state: s,
+        winnerToken,
+        expectedVersion: expected,
+      }).then((res) => {
+        if (res.ok) versionRef.current = res.newVersion;
+      });
     },
     [roomId],
   );
@@ -653,17 +500,46 @@ export function TvDouzeCoupsHost({
       playersWithPresenceRef.current = list;
     });
 
-    ch.on("ce:answer-submit", (p) => handleNormalAnswer(p, "ce"));
-    ch.on("cpc:answer-submit", (p) => handleNormalAnswer(p, "cpc"));
+    // Vague T (#4) — Validation Zod à la réception : un téléphone qui
+    // envoie un payload mal formé (vieux build, manipulation) est ignoré
+    // silencieusement avec un log côté hôte.
+    ch.on("ce:answer-submit", (p) => {
+      const parsed = safeParseEvent("ce:answer-submit", ceAnswerSubmitSchema, p);
+      if (parsed) handleNormalAnswer(parsed, "ce");
+    });
+    ch.on("cpc:answer-submit", (p) => {
+      const parsed = safeParseEvent("cpc:answer-submit", cpcAnswerSubmitSchema, p);
+      if (parsed) handleNormalAnswer(parsed, "cpc");
+    });
     ch.on("ce:duel-candidate-selected", (p) => {
-      void handleDuelCandidateSelected(p);
+      const parsed = safeParseEvent(
+        "ce:duel-candidate-selected",
+        ceDuelCandidateSelectedSchema,
+        p,
+      );
+      if (parsed) void handleDuelCandidateSelected(parsed);
     });
     ch.on("ce:duel-theme-chosen", (p) => {
-      void handleDuelThemeChosen(p);
+      const parsed = safeParseEvent(
+        "ce:duel-theme-chosen",
+        ceDuelThemeChosenSchema,
+        p,
+      );
+      if (parsed) void handleDuelThemeChosen(parsed);
     });
-    ch.on("ce:duel-answer-submit", (p) => handleDuelAnswer(p));
+    ch.on("ce:duel-answer-submit", (p) => {
+      const parsed = safeParseEvent(
+        "ce:duel-answer-submit",
+        ceDuelAnswerSubmitSchema,
+        p,
+      );
+      if (parsed) handleDuelAnswer(parsed);
+    });
     // À la fin du face-à-face, on construit le podium.
-    ch.on("fa:end", (p) => handleFaEnded(p.winnerToken));
+    ch.on("fa:end", (p) => {
+      const parsed = safeParseEvent("fa:end", faEndSchema, p);
+      if (parsed) handleFaEnded(parsed.winnerToken);
+    });
 
     // Premier broadcast après que le channel soit subscribed
     window.setTimeout(() => broadcastCurrent(stateRef.current), 600);
@@ -694,7 +570,11 @@ export function TvDouzeCoupsHost({
       finalistPseudos: { [a.token]: a.pseudo, [b.token]: b.pseudo },
       timerSeconds: 60,
     }).then((res) => {
-      if (res.ok) setFaState(res.state);
+      if (res.ok) {
+        setFaState(res.state);
+        // Vague T (#1) — La préparation FA bumpe state_version, on resync.
+        versionRef.current = res.version;
+      }
     });
   }, [state.phase, state.players, roomId, faState]);
 
@@ -726,6 +606,95 @@ export function TvDouzeCoupsHost({
   }
 
   // ============================================================
+  // Vague U (#9) — Bouton "Skip pour [Pseudo]" côté TV (debug/régie).
+  // Permet à l'hôte d'avancer à la place du joueur courant (compté
+  // comme une mauvaise réponse). Utile quand un téléphone est planté
+  // ou pour tester rapidement la mécanique des duels.
+  //
+  // On simule la réponse en :
+  //  - CE/CPC playing : forge un `*:answer-submit` avec `chosenIdx`
+  //    différent de `correctIdx`/`intrusIdx`, puis appelle le handler
+  //  - Duel question : forge un `ce:duel-answer-submit` avec un
+  //    `chosenIdx` faux → le candidat répond mal → le challenger survit
+  //  - Autres phases (duel-select/theme, elim, podium) : bouton masqué
+  // ============================================================
+  function pickWrongIdx(correctIdx: number, length: number): number {
+    if (length <= 1) return correctIdx; // edge case: pas d'autre choix
+    return correctIdx === 0 ? 1 : 0;
+  }
+
+  function handleSkipCurrentPlayer() {
+    const s = stateRef.current;
+    const q = s.currentQuestion;
+    if (!q) return;
+
+    // CE / CPC playing : envoie un answer-submit "mauvais"
+    if (s.phase === "coup-envoi-playing" && isQuizzQuestion(q)) {
+      const ct = s.turnOrder[s.currentPlayerIdx];
+      if (!ct) return;
+      handleNormalAnswer(
+        {
+          questionId: q.id,
+          chosenIdx: pickWrongIdx(q.correctIdx, q.choices.length),
+          playerToken: ct,
+        },
+        "ce",
+      );
+      return;
+    }
+    if (s.phase === "coup-par-coup-playing" && isCpcQuestion(q)) {
+      const ct = s.turnOrder[s.currentPlayerIdx];
+      if (!ct) return;
+      handleNormalAnswer(
+        {
+          questionId: q.id,
+          chosenIdx: pickWrongIdx(q.intrusIdx, q.propositions.length),
+          playerToken: ct,
+        },
+        "cpc",
+      );
+      return;
+    }
+    // Duel question : envoie un duel-answer "mauvais" pour le candidat
+    if (
+      (s.phase === "coup-envoi-duel-question" ||
+        s.phase === "coup-par-coup-duel-question") &&
+      s.currentDuel?.candidateToken &&
+      s.currentDuel.question
+    ) {
+      handleDuelAnswer({
+        questionId: s.currentDuel.question.id,
+        chosenIdx: pickWrongIdx(
+          s.currentDuel.question.correctIdx,
+          s.currentDuel.question.choices.length,
+        ),
+        candidateToken: s.currentDuel.candidateToken,
+      });
+    }
+  }
+
+  // Joueur courant dont on peut skip le tour (null si pas en phase
+  // skippable). Le bouton n'est rendu que dans ce cas.
+  const skipTargetPseudo = (() => {
+    if (
+      state.phase === "coup-envoi-playing" ||
+      state.phase === "coup-par-coup-playing"
+    ) {
+      const t = state.turnOrder[state.currentPlayerIdx];
+      return state.players.find((p) => p.token === t)?.pseudo ?? null;
+    }
+    if (
+      (state.phase === "coup-envoi-duel-question" ||
+        state.phase === "coup-par-coup-duel-question") &&
+      state.currentDuel?.candidateToken
+    ) {
+      const t = state.currentDuel.candidateToken;
+      return state.players.find((p) => p.token === t)?.pseudo ?? null;
+    }
+    return null;
+  })();
+
+  // ============================================================
   // RENDER : dispatch selon state.phase
   // ============================================================
   // Face-à-face (étape 3) — délégué à TvFaceAFaceView (P5)
@@ -735,6 +704,7 @@ export function TvDouzeCoupsHost({
         code={code}
         roomId={roomId}
         initialState={faState}
+        initialVersion={versionRef.current}
         players={playersWithPresenceRef.current.length > 0
           ? playersWithPresenceRef.current
           : state.players.map((p) => ({
@@ -805,14 +775,27 @@ export function TvDouzeCoupsHost({
         <p className="text-sm font-bold uppercase tracking-widest text-gold-warm">
           Mode 12 Coups · Partie {code}
         </p>
-        <button
-          type="button"
-          onClick={() => setShowEndConfirm(true)}
-          className="inline-flex items-center gap-1.5 rounded-md border border-buzz/30 bg-card px-3 py-1.5 text-xs font-semibold text-buzz hover:bg-buzz/10"
-        >
-          <X className="h-3.5 w-3.5" aria-hidden="true" />
-          Terminer
-        </button>
+        <div className="flex items-center gap-2">
+          {skipTargetPseudo && (
+            <button
+              type="button"
+              onClick={handleSkipCurrentPlayer}
+              title={`Avancer à la place de ${skipTargetPseudo} (compte comme une mauvaise réponse)`}
+              className="inline-flex items-center gap-1.5 rounded-md border border-foreground/20 bg-card px-3 py-1.5 text-xs font-semibold text-foreground/70 hover:border-foreground/40 hover:bg-foreground/5"
+            >
+              <SkipForward className="h-3.5 w-3.5" aria-hidden="true" />
+              Skip {skipTargetPseudo}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowEndConfirm(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-buzz/30 bg-card px-3 py-1.5 text-xs font-semibold text-buzz hover:bg-buzz/10"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+            Terminer
+          </button>
+        </div>
       </header>
 
       {/* Vue de la phase courante (sous l'overlay si élimination) */}

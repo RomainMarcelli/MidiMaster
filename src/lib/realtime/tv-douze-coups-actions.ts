@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { asJsonb } from "@/lib/supabase/jsonb";
 import {
   buildFinalRanking,
   pickDuelThemes,
@@ -10,6 +11,11 @@ import {
   type QuizzQuestion,
   type TvDouzeCoupsState,
 } from "./tv-douze-coups-state";
+import {
+  parseQuizzAnswers,
+  requireRoomHost,
+  shuffle,
+} from "./tv-actions-helpers";
 
 /**
  * Vague R — Server actions pour le mode 12 Coups TV.
@@ -48,30 +54,28 @@ const POOL_DUELS = 30;
 export async function startDouzeCoupsTv(
   input: PrepareInput,
 ): Promise<
-  | { ok: true; state: TvDouzeCoupsState }
+  | { ok: true; state: TvDouzeCoupsState; version: number }
   | { ok: false; message: string }
 > {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, message: "Non authentifié." };
-
-  const { data: room } = await supabase
-    .from("tv_rooms")
-    .select("id, host_id")
-    .eq("id", input.roomId)
-    .maybeSingle();
-  if (!room || room.host_id !== user.id) {
-    return { ok: false, message: "Room introuvable ou non autorisée." };
-  }
+  const auth = await requireRoomHost(supabase, input.roomId);
+  if (!auth.ok) return auth;
 
   if (input.turnOrder.length < 2) {
     return { ok: false, message: "Au moins 2 joueurs requis." };
   }
 
-  // Charge les 3 pools en parallèle
-  const [quizz4Result, cpcResult] = await Promise.all([
+  // Vague T — Étape 1 utilise quizz_2 (boutons A/B), duels en quizz_4
+  // pour la difficulté supplémentaire requise pour départager. Charge
+  // les 3 pools en parallèle.
+  const [quizz2Result, quizz4Result, cpcResult] = await Promise.all([
+    supabase
+      .from("questions")
+      .select(
+        "id, enonce, reponses, format, explication, category_id",
+      )
+      .eq("type", "quizz_2")
+      .limit(200),
     supabase
       .from("questions")
       .select(
@@ -86,6 +90,12 @@ export async function startDouzeCoupsTv(
       .limit(150),
   ]);
 
+  if (quizz2Result.error || !quizz2Result.data) {
+    return {
+      ok: false,
+      message: `Pas de questions quizz_2 (${quizz2Result.error?.message})`,
+    };
+  }
   if (quizz4Result.error || !quizz4Result.data) {
     return {
       ok: false,
@@ -98,10 +108,16 @@ export async function startDouzeCoupsTv(
       message: `Pas de questions coup_par_coup (${cpcResult.error?.message})`,
     };
   }
-  if (quizz4Result.data.length < POOL_COUP_ENVOI / 2) {
+  if (quizz2Result.data.length < POOL_COUP_ENVOI / 2) {
     return {
       ok: false,
-      message: `Trop peu de questions quizz_4 (${quizz4Result.data.length}, requis ≥ ${POOL_COUP_ENVOI / 2}).`,
+      message: `Trop peu de questions quizz_2 (${quizz2Result.data.length}, requis ≥ ${POOL_COUP_ENVOI / 2}).`,
+    };
+  }
+  if (quizz4Result.data.length < POOL_DUELS / 2) {
+    return {
+      ok: false,
+      message: `Trop peu de questions quizz_4 pour les duels (${quizz4Result.data.length}, requis ≥ ${POOL_DUELS / 2}).`,
     };
   }
   if (cpcResult.data.length < 5) {
@@ -111,24 +127,22 @@ export async function startDouzeCoupsTv(
     };
   }
 
-  // Convertit + mélange
-  const allQuizz = quizz4Result.data
-    .map(parseQuizz4)
+  // Convertit + mélange. Le parser quizz est commun (le format des
+  // entrées BDD est identique : reponses[] avec un correct=true), seul
+  // le nombre de choices diffère (2 vs 4).
+  const allQuizz2 = quizz2Result.data
+    .map(parseQuizz)
+    .filter((q): q is QuizzQuestion => q !== null);
+  const allQuizz4 = quizz4Result.data
+    .map(parseQuizz)
     .filter((q): q is QuizzQuestion => q !== null);
   const allCpc = cpcResult.data
     .map(parseCpc)
     .filter((q): q is CpcQuestion => q !== null);
 
-  const shuffledQuizz = shuffle(allQuizz);
-  const shuffledCpc = shuffle(allCpc);
-
-  // Coupe : moitié pour Coup d'Envoi, moitié pour duels
-  const coupEnvoiPool = shuffledQuizz.slice(0, POOL_COUP_ENVOI);
-  const duelsPool = shuffledQuizz.slice(
-    POOL_COUP_ENVOI,
-    POOL_COUP_ENVOI + POOL_DUELS,
-  );
-  const cpcPool = shuffledCpc.slice(0, POOL_COUP_PAR_COUP);
+  const coupEnvoiPool = shuffle(allQuizz2).slice(0, POOL_COUP_ENVOI);
+  const duelsPool = shuffle(allQuizz4).slice(0, POOL_DUELS);
+  const cpcPool = shuffle(allCpc).slice(0, POOL_COUP_PAR_COUP);
 
   // Construit les players
   const metaByToken = new Map(
@@ -169,45 +183,72 @@ export async function startDouzeCoupsTv(
     finalRanking: null,
   };
 
+  // Vague T (#1) — On reset state_version à 0 au démarrage. Les saves
+  // ultérieurs utilisent un optimistic lock sur cette colonne.
   await supabase
     .from("tv_rooms")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .update({ status: "playing", state: state as any })
+    .update({
+      status: "playing",
+      state: asJsonb(state),
+      state_version: 0,
+    })
     .eq("id", input.roomId)
-    .eq("host_id", user.id);
+    .eq("host_id", auth.ctx.userId);
 
-  return { ok: true, state };
+  return { ok: true, state, version: 0 };
 }
+
+/**
+ * Vague T (#1) — Résultat d'un save avec optimistic concurrency.
+ * `stale` = un autre save concurrent a déjà bumpé state_version → on
+ * laisse le caller décider (ignore / refetch / retry).
+ */
+export type SaveStateResult =
+  | { ok: true; newVersion: number }
+  | { ok: false; reason: "unauthorized" | "stale" };
 
 /**
  * Persiste le state du jeu (best-effort, pour reconnexion / résumé). Appelée
  * à chaque transition de phase ou changement de turn.
+ *
+ * Vague T (#1) — Optimistic locking via `expectedVersion` :
+ *  - le UPDATE filtre sur `state_version = expectedVersion`
+ *  - le UPDATE assigne `state_version = expectedVersion + 1`
+ *  - si l'UPDATE renvoie `count: 0` → un autre save a passé entre-temps,
+ *    on retourne `stale` (le caller décide quoi faire).
  */
 export async function saveDouzeCoupsState(input: {
   roomId: string;
   state: TvDouzeCoupsState;
   status?: "playing" | "paused" | "ended";
-}): Promise<void> {
+  /** Version attendue en BDD (= dernier `newVersion` retourné). */
+  expectedVersion: number;
+}): Promise<SaveStateResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
-  await supabase
+  const auth = await requireRoomHost(supabase, input.roomId);
+  if (!auth.ok) return { ok: false, reason: "unauthorized" };
+
+  const newVersion = input.expectedVersion + 1;
+  const { count } = await supabase
     .from("tv_rooms")
-    .update({
-      // Le state est typé Json (Supabase generated types). Notre
-      // TvDouzeCoupsState est sérialisable JSONB en BDD. Cast `any`
-      // local au champ uniquement (pas tout l'objet).
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      state: input.state as any,
-      ...(input.status ? { status: input.status } : {}),
-      ...(input.status === "ended"
-        ? { ended_at: new Date().toISOString() }
-        : {}),
-    })
+    .update(
+      {
+        state: asJsonb(input.state),
+        state_version: newVersion,
+        ...(input.status ? { status: input.status } : {}),
+        ...(input.status === "ended"
+          ? { ended_at: new Date().toISOString() }
+          : {}),
+      },
+      { count: "exact" },
+    )
     .eq("id", input.roomId)
-    .eq("host_id", user.id);
+    .eq("host_id", auth.ctx.userId)
+    .eq("state_version", input.expectedVersion);
+  if ((count ?? 0) === 0) {
+    return { ok: false, reason: "stale" };
+  }
+  return { ok: true, newVersion };
 }
 
 /**
@@ -267,7 +308,7 @@ export async function pickDuelQuestion(
     .limit(50);
   if (!data || data.length === 0) return null;
   const pick = data[Math.floor(Math.random() * data.length)]!;
-  return parseQuizz4(pick);
+  return parseQuizz(pick);
 }
 
 /**
@@ -277,17 +318,19 @@ export async function finalizeDouzeCoupsTv(input: {
   roomId: string;
   state: TvDouzeCoupsState;
   winnerToken: string | null;
-}): Promise<void> {
+  expectedVersion: number;
+}): Promise<SaveStateResult> {
   const finalRanking = buildFinalRanking(input.state.players, input.winnerToken);
   const next: TvDouzeCoupsState = {
     ...input.state,
     phase: "podium",
     finalRanking,
   };
-  await saveDouzeCoupsState({
+  return saveDouzeCoupsState({
     roomId: input.roomId,
     state: next,
     status: "playing", // on reste en playing, l'hôte ferme via Quitter ou Recommencer
+    expectedVersion: input.expectedVersion,
   });
 }
 
@@ -299,31 +342,30 @@ export async function restartRoom(
   roomId: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, message: "Non authentifié." };
+  const auth = await requireRoomHost(supabase, roomId);
+  if (!auth.ok) return auth;
 
+  // Vague T (#1) — Reset state_version aussi : on repart à 0 pour le
+  // prochain démarrage de partie.
   const { error } = await supabase
     .from("tv_rooms")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .update({ status: "waiting", state: {} as any })
+    .update({
+      status: "waiting",
+      state: asJsonb({}),
+      face_a_face_state: null,
+      state_version: 0,
+    })
     .eq("id", roomId)
-    .eq("host_id", user.id);
+    .eq("host_id", auth.ctx.userId);
   if (error) return { ok: false, message: error.message };
   return { ok: true };
 }
 
 // ============================================================================
-// Helpers internes (parsing BDD → types métier)
+// Parsers locaux (utilisent les helpers partagés tv-actions-helpers.ts)
 // ============================================================================
 
-interface RawReponse {
-  text: string;
-  correct?: boolean;
-}
-
-function parseQuizz4(row: {
+function parseQuizz(row: {
   id: string;
   enonce: string;
   reponses: unknown;
@@ -331,19 +373,22 @@ function parseQuizz4(row: {
   explication?: string | null;
   category_id?: number | null;
 }): QuizzQuestion | null {
-  const reponses = (row.reponses as RawReponse[]) ?? [];
-  if (!Array.isArray(reponses) || reponses.length === 0) return null;
-  const choices = reponses.map((r, idx) => ({ idx, text: r.text }));
-  const correctIdx = reponses.findIndex((r) => r.correct === true);
+  const parsed = parseQuizzAnswers(row.reponses);
+  if (!parsed) return null;
   return {
     id: row.id,
     enonce: row.enonce,
     format: row.format ?? null,
-    choices,
-    correctIdx: Math.max(0, correctIdx),
+    choices: parsed.choices,
+    correctIdx: Math.max(0, parsed.correctIdx),
     explication: row.explication ?? null,
     categoryId: row.category_id ?? null,
   };
+}
+
+interface RawReponse {
+  text: string;
+  correct?: boolean;
 }
 
 function parseCpc(row: {
@@ -371,13 +416,4 @@ function parseCpc(row: {
   };
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  const out = [...arr];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const tmp = out[i]!;
-    out[i] = out[j]!;
-    out[j] = tmp;
-  }
-  return out;
-}
+// `shuffle` est désormais importé depuis `./tv-actions-helpers`.

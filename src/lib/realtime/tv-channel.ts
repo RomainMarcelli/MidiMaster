@@ -25,9 +25,13 @@ import type { RoomEventName, RoomEvents } from "./room-events";
  * orphan/zombie → on le force-remove de la liste interne avant de recréer.
  *
  * **Presence (P1.1)** : la source de vérité "qui est en ligne" est Supabase
- * Realtime Presence (heartbeat WebSocket natif, ~15s timeout). On garde
- * `tv_room_players.is_connected` comme cache best-effort en BDD, mais
- * l'UI live (lobby, sidebar des joueurs) doit utiliser `presenceState()`.
+ * Realtime Presence (heartbeat WebSocket natif, ~15s timeout). L'UI live
+ * (lobby, sidebar des joueurs) utilise `presenceState()`.
+ *
+ * Vague T (#6) — La colonne `tv_room_players.is_connected` n'est plus
+ * écrite par notre code (joinRoom/rejoinRoomByToken/addRemotePlayer
+ * l'omettent désormais). La colonne reste en BDD avec son DEFAULT TRUE
+ * pour ne pas casser la migration mais n'a plus de valeur applicative.
  */
 
 export interface PresencePlayerMeta {
@@ -141,10 +145,23 @@ export function joinTvChannel(roomCode: string): TvChannelHandle {
     // 3a. Réutilise le channel existant (multi-mount du même code)
     channel = existing;
   } else {
-    // 3b. Crée un nouveau channel + bind les presence callbacks AVANT subscribe
+    // 3b. Crée un nouveau channel + bind les presence callbacks AVANT subscribe.
+    //
+    // Vague U (#1.2) — `broadcast.self = true` est CRITIQUE pour que les
+    // bots fonctionnent : la TV simule la réponse d'un bot via
+    // `ch.send("ce:answer-submit", ...)`, et son propre handler
+    // `ch.on("ce:answer-submit")` doit alors se déclencher. Avec `self:
+    // false`, l'event ne revenait pas au sender → la partie restait
+    // figée dès qu'un bot devait jouer.
+    //
+    // Pas de feedback loop : la TV n'écoute QUE les events client→hôte
+    // (`*:answer-submit`, `*:duel-*`, `fa:end`) qui ne sont jamais
+    // émis par la TV elle-même (sauf justement quand elle simule un bot).
+    // Les téléphones reçoivent leurs propres `*:answer-submit` mais ne
+    // les écoutent pas (ils écoutent les events host→phones).
     channel = supabase.channel(`room:${roomCode}`, {
       config: {
-        broadcast: { self: false, ack: false },
+        broadcast: { self: true, ack: false },
         presence: { key: "" },
       },
     });

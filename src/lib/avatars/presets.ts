@@ -69,6 +69,17 @@ export function generateRandomAvatar(style: DicebearStyle): string {
   return buildUrl(style, seed);
 }
 
+/**
+ * Vague U (#5) — Pioche un avatar pré-défini au hasard pour un bot.
+ * Préférence pour les styles "bottts" (robots) pour rester cohérent
+ * avec l'identité bot, mais on accepte aussi un mélange de tous les
+ * styles pour la variété visuelle. `rng` injectable pour les tests.
+ */
+export function pickRandomBotAvatarUrl(rng: () => number = Math.random): string {
+  const i = Math.floor(rng() * AVATAR_PACK.length);
+  return AVATAR_PACK[i]?.url ?? AVATAR_PACK[0]!.url;
+}
+
 export const DICEBEAR_STYLES: ReadonlyArray<{
   id: DicebearStyle;
   label: string;

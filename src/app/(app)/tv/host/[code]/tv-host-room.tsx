@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { Bot, Crown, Loader2, Mic, MinusCircle, Play, Smartphone, Tv, Users, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Bot, Crown, Loader2, MinusCircle, Play, Smartphone, Tv, Users, X } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
@@ -10,16 +9,10 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { createClient } from "@/lib/supabase/client";
 import { endTvRoom } from "@/lib/realtime/room-actions";
-import { prepareTvGame, saveTvGameState } from "@/lib/realtime/tv-game-actions";
-import { joinTvChannel, type TvChannelHandle } from "@/lib/realtime/tv-channel";
-import { type TvGameState } from "@/lib/realtime/tv-game-state";
-import { prepareFaceAFace } from "@/lib/realtime/face-a-face-actions";
-import { type FaceAFaceState } from "@/lib/realtime/face-a-face-state";
+import { joinTvChannel } from "@/lib/realtime/tv-channel";
 import { startDouzeCoupsTv } from "@/lib/realtime/tv-douze-coups-actions";
 import { type TvDouzeCoupsState } from "@/lib/realtime/tv-douze-coups-state";
-import { AnimEffect } from "@/components/animations/AnimEffect";
 import { WaitingCarousel } from "./waiting-carousel";
-import { TvFaceAFaceView } from "./tv-face-a-face-view";
 import { TvDouzeCoupsHost } from "./tv-douze-coups-host";
 import { ShareLinkButtons } from "@/components/tv/ShareLinkButtons";
 import { addBotToRoom, removeBotFromRoom } from "@/lib/realtime/bot-actions";
@@ -69,7 +62,6 @@ export function TvHostRoom({
   const router = useRouter();
   const [players, setPlayers] = useState(initialPlayers);
   const [status, setStatus] = useState(initialStatus);
-  const [starting, setStarting] = useState(false);
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
   // H4.3 — État du modal "Mettre fin à la partie".
   const [showEndConfirm, setShowEndConfirm] = useState(false);
@@ -206,22 +198,13 @@ export function TvHostRoom({
     [playersWithPresence],
   );
 
-  // État du jeu TV (en mode playing). Chargé via prepareTvGame ou via
-  // un SELECT sur tv_rooms.state si on revient sur la page après refresh.
-  const [game, setGame] = useState<TvGameState | null>(null);
-  // Ref synchrone sur `game` pour permettre aux callbacks Realtime de
-  // lire l'état courant SANS passer par setState((prev) => ...). Évite
-  // les side effects dans les state updaters (anti-pattern React 18).
-  const gameRef = useRef<TvGameState | null>(null);
-  gameRef.current = game;
-  const [hostChannel, setHostChannel] = useState<TvChannelHandle | null>(null);
-  // P5.1 — État du face-à-face (null tant que non démarré). Si non null,
-  // on affiche TvFaceAFaceView au lieu du flux normal.
-  const [faState, setFaState] = useState<FaceAFaceState | null>(null);
-  const [startingFa, setStartingFa] = useState(false);
   // Vague R — État du mode "12 Coups" (mode complet à 3 phases). Si non
   // null, on bascule sur TvDouzeCoupsHost qui orchestre tout le flux.
+  // Vague T — c'est le seul mode TV qui reste (le legacy quizz_2 et le
+  // face-à-face direct ont été supprimés). On suit aussi `dcVersion`
+  // (initial = 0 après startDouzeCoupsTv) pour l'optimistic locking.
   const [dcState, setDcState] = useState<TvDouzeCoupsState | null>(null);
+  const [dcVersion, setDcVersion] = useState(0);
   const [startingDc, setStartingDc] = useState(false);
   // Vague S3 — état UI : ajout/suppression de bots en cours +
   // niveau de skill du bot à ajouter (40=facile, 70=moyen, 90=difficile).
@@ -258,40 +241,6 @@ export function TvHostRoom({
     }
     // Le DELETE postgres_changes va automatiquement retirer la ligne
     // côté client.
-  }
-
-  /** P5.1 — Lance le face-à-face avec les 2 premiers joueurs en ligne. */
-  async function handleStartFaceAFace() {
-    if (startingFa) return;
-    const online = playersWithPresence.filter((p) => p.isConnected);
-    if (online.length < 2) {
-      alert("Il faut au moins 2 joueurs connectés pour le face-à-face.");
-      return;
-    }
-    setStartingFa(true);
-    const [a, b] = online.slice(0, 2);
-    if (!a || !b) {
-      setStartingFa(false);
-      return;
-    }
-    const finalists: [string, string] = [a.token, b.token];
-    const finalistPseudos: Record<string, string> = {
-      [a.token]: a.pseudo,
-      [b.token]: b.pseudo,
-    };
-    const res = await prepareFaceAFace({
-      roomId,
-      finalists,
-      finalistPseudos,
-      timerSeconds: 60,
-    });
-    setStartingFa(false);
-    if (!res.ok) {
-      alert(res.message);
-      return;
-    }
-    setFaState(res.state);
-    setStatus("playing");
   }
 
   /** Vague R — Lance le mode "12 Coups" avec tous les joueurs en ligne. */
@@ -337,27 +286,8 @@ export function TvHostRoom({
       return;
     }
     setDcState(res.state);
+    setDcVersion(res.version);
     setStatus("playing");
-  }
-
-  async function handleStart() {
-    if (!canStart || starting) return;
-    setStarting(true);
-    // P1.1 — turnOrder construit depuis Presence (qui est en ligne MAINTENANT)
-    // intersecté avec la liste BDD pour l'ordre stable (par joinedAt).
-    const turnOrder = playersWithPresence
-      .filter((p) => p.isConnected)
-      .sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))
-      .map((p) => p.token);
-    const res = await prepareTvGame({ roomId, turnOrder, totalRounds: 10 });
-    if (!res.ok) {
-      alert(res.message);
-      setStarting(false);
-      return;
-    }
-    setGame(res.state);
-    setStatus("playing");
-    setStarting(false);
   }
 
   /**
@@ -368,11 +298,6 @@ export function TvHostRoom({
    * marquer la room ended. Tous les joueurs (light/remote/face-à-face)
    * reçoivent l'event et basculent sur leur écran "Partie fermée par
    * l'hôte" avec countdown 5s vers /play.
-   *
-   * On obtient un handle vers le channel via `joinTvChannel(code)` plutôt
-   * que `hostChannel` (qui est null en lobby) — grâce au cache + ref
-   * counting du wrapper, on récupère le channel déjà ouvert pour la
-   * presence, on incrémente refCount, on broadcast, puis on unsubscribe.
    */
   async function handleEnd() {
     setEnding(true);
@@ -381,195 +306,42 @@ export function TvHostRoom({
     // Petit délai pour laisser partir le broadcast avant unsubscribe.
     await new Promise((r) => setTimeout(r, 300));
     await broadcastCh.unsubscribe();
-    if (hostChannel) await hostChannel.unsubscribe();
     await endTvRoom(roomId);
     setEnding(false);
     setShowEndConfirm(false);
     router.push("/tv/host");
   }
 
-  // Une fois en "playing", on monte le channel hôte qui :
-  //  - broadcast la question courante au démarrage et à chaque tour
-  //  - écoute les `answer:submit` des téléphones, valide, broadcast résultat
-  useEffect(() => {
-    if (status !== "playing" || !game) return;
-
-    const ch = joinTvChannel(code);
-    setHostChannel(ch);
-
-    // Map token → pseudo pour les payloads broadcast
-    const tokenToPseudo = new Map(
-      players.map((p) => [
-        // Le token n'est pas dans `players` (pas exposé via la query
-        // initiale). On va le récupérer en parallèle ci-dessous.
-        p.id,
-        p.pseudo,
-      ]),
-    );
-    void tokenToPseudo;
-
-    /** Diffuse la question courante à tous (sans la bonne réponse). */
-    function broadcastCurrent(state: TvGameState) {
-      const q = state.questions[state.currentQuestionIdx];
-      if (!q || !state.currentPlayerToken) return;
-      ch.send("question:show", {
-        questionId: q.id,
-        enonce: q.enonce,
-        format: q.format ?? null,
-        choices: q.choices,
-        currentPlayerToken: state.currentPlayerToken,
-        currentPlayerPseudo: getPseudoForToken(state.currentPlayerToken) ?? "?",
-      });
-    }
-
-    function getPseudoForToken(token: string): string | undefined {
-      // On ne dispose pas direct des tokens dans `players` (volontairement
-      // — la TV peut le voir mais pas l'exposer). Un fetch ad-hoc serait
-      // mieux ; pour l'instant on utilise pseudo via cache local rempli
-      // par l'effet ci-dessous.
-      return tokenPseudoCache.current.get(token);
-    }
-
-    // Diffusion initiale
-    broadcastCurrent(game);
-
-    ch.on("answer:submit", async (payload) => {
-      // Verrou : on n'accepte que la réponse du joueur dont c'est le tour
-      // ET de la bonne question (anti-spam, anti-race condition).
-      // Lecture via gameRef pour éviter de mettre les side effects (ch.send,
-      // saveTvGameState, setTimeout) dans le state updater — sinon React 18
-      // warn "Cannot update a component while rendering a different one".
-      const prev = gameRef.current;
-      if (!prev) return;
-      if (prev.phase !== "playing") return;
-      const q = prev.questions[prev.currentQuestionIdx];
-      if (!q || q.id !== payload.questionId) return;
-      if (payload.playerToken !== prev.currentPlayerToken) return;
-
-      const isCorrect = payload.chosenIdx === q.correctIdx;
-      const newScores = {
-        ...prev.scores,
-        [payload.playerToken]:
-          (prev.scores[payload.playerToken] ?? 0) + (isCorrect ? 1 : 0),
-      };
-
-      const nextRound = prev.currentRound + 1;
-      const isLast = nextRound >= prev.totalRounds;
-      const nextIdx =
-        (prev.turnOrder.indexOf(payload.playerToken) + 1) %
-        prev.turnOrder.length;
-      const nextToken = prev.turnOrder[nextIdx] ?? null;
-      const nextQIdx = (prev.currentQuestionIdx + 1) % prev.questions.length;
-
-      const nextState: TvGameState = isLast
-        ? {
-            ...prev,
-            scores: newScores,
-            phase: "results",
-          }
-        : {
-            ...prev,
-            scores: newScores,
-            currentQuestionIdx: nextQIdx,
-            currentPlayerToken: nextToken,
-            currentRound: nextRound,
-          };
-
-      // State update (assignation pure)
-      gameRef.current = nextState;
-      setGame(nextState);
-
-      // Side effects HORS de l'updater
-      ch.send("question:result", {
-        questionId: q.id,
-        byToken: payload.playerToken,
-        chosenIdx: payload.chosenIdx,
-        correctIdx: q.correctIdx,
-        isCorrect,
-        explication: q.explication ?? null,
-      });
-      void saveTvGameState({
-        roomId,
-        state: nextState,
-        status: isLast ? "ended" : undefined,
-      });
-      if (!isLast) {
-        window.setTimeout(() => broadcastCurrent(nextState), 3500);
-      } else {
-        ch.send("phase:change", { phase: "results" });
-      }
-    });
-
-    return () => {
-      void ch.unsubscribe();
-      setHostChannel(null);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, code, roomId]);
-
-  // Cache local token → pseudo (rempli après mount via select sur la BDD)
-  const tokenPseudoCache = useTokenPseudoCache(roomId, players);
-
   // Vague R — Mode 12 Coups complet (3 phases enchaînées + duels + podium).
-  // Prend la priorité sur le legacy "playing" / face-à-face direct.
+  // Vague T — c'est le seul mode TV. Le legacy quizz_2 et le face-à-face
+  // direct ont été retirés (handleStart / handleStartFaceAFace n'étaient
+  // déjà plus exposés depuis Vague S2).
   if (dcState) {
     return (
       <TvDouzeCoupsHost
         code={code}
         roomId={roomId}
         initialState={dcState}
-      />
-    );
-  }
-
-  // P5.1 — Si on est en face-à-face, on affiche cette vue
-  if (faState) {
-    return (
-      <TvFaceAFaceView
-        code={code}
-        roomId={roomId}
-        initialState={faState}
-        players={playersWithPresence}
-        onEnd={() => setShowEndConfirm(true)}
-      />
-    );
-  }
-
-  // Switch waiting / playing / results
-  if (status === "playing" && game?.phase === "playing") {
-    return (
-      <TvPlayingView
-        code={code}
-        game={game}
-        players={playersWithPresence}
-        tokenCache={tokenPseudoCache.current}
-        onEnd={() => setShowEndConfirm(true)}
-      />
-    );
-  }
-  if (status === "playing" && game?.phase === "results") {
-    return (
-      <TvResultsView
-        game={game}
-        players={playersWithPresence}
-        tokenCache={tokenPseudoCache.current}
-        onClose={() => setShowEndConfirm(true)}
+        initialVersion={dcVersion}
       />
     );
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 p-6 lg:p-10">
-      <header className="flex items-center justify-between">
+    <main className="mx-auto flex h-[100dvh] w-full max-w-7xl flex-col gap-3 overflow-hidden p-4 lg:p-6">
+      {/* Vague U (#2) — Layout compact "tout sur 1 écran sans scroll" :
+          header mince, 2 colonnes pleine hauteur (QR à gauche compact,
+          joueurs + actions à droite), carrousel en bandeau bas. */}
+      <header className="flex shrink-0 items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gold/20 text-gold-warm">
-            <Tv className="h-6 w-6" aria-hidden="true" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gold/20 text-gold-warm">
+            <Tv className="h-5 w-5" aria-hidden="true" />
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-gold-warm">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gold-warm">
               Mode TV Soirée
             </p>
-            <h1 className="font-display text-2xl font-extrabold text-foreground">
+            <h1 className="font-display text-xl font-extrabold leading-tight text-foreground">
               Salle d&apos;attente
             </h1>
           </div>
@@ -578,42 +350,41 @@ export function TvHostRoom({
           type="button"
           onClick={() => setShowEndConfirm(true)}
           aria-label="Mettre fin à la partie"
-          className="inline-flex items-center gap-1.5 rounded-md border border-buzz/30 bg-card px-3 py-2 text-sm font-semibold text-buzz hover:border-buzz hover:bg-buzz/10"
+          className="inline-flex items-center gap-1.5 rounded-md border border-buzz/30 bg-card px-3 py-1.5 text-xs font-semibold text-buzz hover:border-buzz hover:bg-buzz/10"
         >
-          <X className="h-4 w-4" aria-hidden="true" />
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
           Quitter
         </button>
       </header>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1fr]">
-        {/* Bloc QR + code */}
-        <section className="flex flex-col items-center gap-5 rounded-3xl border border-gold/40 bg-gradient-to-br from-gold-pale via-cream to-sky-pale p-8 text-center glow-sun">
-          <p className="text-xs font-bold uppercase tracking-widest text-gold-warm">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(280px,1fr)_minmax(320px,1.3fr)]">
+        {/* Bloc QR + code (compact) */}
+        <section className="flex min-h-0 flex-col items-center gap-3 overflow-hidden rounded-2xl border border-gold/40 bg-gradient-to-br from-gold-pale via-cream to-sky-pale p-4 text-center glow-sun">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gold-warm">
             Pour rejoindre
           </p>
           {joinUrl ? (
-            <div className="rounded-2xl bg-card p-5 shadow-[0_8px_32px_rgba(245,183,0,0.35)]">
+            <div className="rounded-xl bg-card p-3 shadow-[0_8px_32px_rgba(245,183,0,0.35)]">
               <QRCodeSVG
                 value={joinUrl}
-                size={280}
+                size={180}
                 level="M"
                 includeMargin={false}
               />
             </div>
           ) : (
-            <div className="flex h-[280px] w-[280px] items-center justify-center rounded-2xl bg-card">
+            <div className="flex h-[180px] w-[180px] items-center justify-center rounded-xl bg-card">
               <Loader2 className="h-8 w-8 animate-spin text-gold-warm" aria-hidden="true" />
             </div>
           )}
-          <div className="flex flex-col gap-1">
-            <p className="text-sm font-bold text-foreground/70">
+          <div className="flex flex-col gap-0.5">
+            <p className="text-xs font-bold text-foreground/70">
               Ou tape le code
             </p>
-            <p className="font-display text-7xl font-black tracking-[0.3em] text-foreground sm:text-8xl">
+            <p className="font-display text-5xl font-black tracking-[0.25em] text-foreground sm:text-6xl">
               {code}
             </p>
           </div>
-          {/* Vague S4 — Boutons "Copier le lien" + "Partager" (Web Share API) */}
           {joinUrl && status === "waiting" && (
             <ShareLinkButtons
               url={joinUrl}
@@ -621,94 +392,75 @@ export function TvHostRoom({
               text={`Rejoins-moi avec le code ${code}`}
             />
           )}
-          {roomModeKind === "remote" ? (
-            <div className="flex flex-col items-center gap-1.5">
-              <span className="rounded-full bg-sky/15 px-3 py-1 text-xs font-bold uppercase tracking-widest text-sky">
-                <Smartphone className="mr-1 inline h-3 w-3" aria-hidden="true" />
-                Mode télécommande
-              </span>
-              <p className="max-w-xs text-sm text-foreground/70">
-                Un seul téléphone (la régie) suffit. Il scanne ce QR code et
-                ajoute tous les joueurs depuis sa liste.
-              </p>
-            </div>
-          ) : (
-            <p className="max-w-xs text-sm text-foreground/70">
-              Sur ton téléphone, ouvre l&apos;app et entre ce code, ou scanne
-              le QR code ci-dessus.
-            </p>
-          )}
-          {/* P3.1 — Carrousel d'ambiance dans le coin bas du bloc QR.
-              N'apparaît qu'en lobby (status waiting). */}
-          {status === "waiting" && (
-            <div className="mt-2 w-full max-w-md">
-              <WaitingCarousel
-                seed={code}
-                quizPreview={quizPreview}
-                intervalMs={7000}
-              />
-            </div>
+          {roomModeKind === "remote" && (
+            <span className="rounded-full bg-sky/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-sky">
+              <Smartphone className="mr-1 inline h-3 w-3" aria-hidden="true" />
+              Mode télécommande
+            </span>
           )}
         </section>
 
-        {/* Bloc joueurs connectés */}
-        <section className="flex flex-col gap-4 rounded-3xl border border-border bg-card p-6 glow-card">
-          <div className="flex items-center justify-between">
+        {/* Bloc joueurs connectés + actions (à droite) */}
+        <section className="flex min-h-0 flex-col gap-3 overflow-hidden rounded-2xl border border-border bg-card p-4 glow-card">
+          <div className="flex shrink-0 items-center justify-between">
             <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-foreground" aria-hidden="true" />
-              <h2 className="font-display text-xl font-bold text-foreground">
-                Joueurs connectés
+              <Users className="h-4 w-4 text-foreground" aria-hidden="true" />
+              <h2 className="font-display text-base font-bold text-foreground">
+                Joueurs ({playersWithPresence.filter((p) => p.isConnected).length}/8)
               </h2>
             </div>
-            <span className="rounded-full bg-gold/15 px-3 py-1 text-sm font-bold text-gold-warm">
-              {playersWithPresence.filter((p) => p.isConnected).length} / 8
-            </span>
+            {!canStart && status === "waiting" && (
+              <span className="text-[10px] font-medium text-foreground/50">
+                4 joueurs requis
+              </span>
+            )}
           </div>
 
+          {/* Grille compacte de joueurs (max 8) */}
           {playersWithPresence.length === 0 ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border py-10 text-center text-foreground/50">
-              <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" />
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-6 text-center text-sm text-foreground/50">
+              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
               <p>En attente des premiers joueurs…</p>
             </div>
           ) : (
-            <ul className="flex flex-col gap-2">
+            <ul className="grid grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-2 md:grid-cols-2 xl:grid-cols-2">
               {playersWithPresence.map((p) => (
                 <li
                   key={p.id}
                   className={
                     p.isBot
-                      ? "flex items-center gap-3 rounded-xl border border-sky/40 bg-sky/5 p-3"
-                      : "flex items-center gap-3 rounded-xl border border-border bg-background/40 p-3"
+                      ? "flex items-center gap-2 rounded-xl border border-sky/40 bg-sky/5 p-2"
+                      : "flex items-center gap-2 rounded-xl border border-border bg-background/40 p-2"
                   }
                 >
                   <div
                     className={
                       p.isBot
-                        ? "flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-sky/15"
-                        : "flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gold/15"
+                        ? "flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-sky/15"
+                        : "flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gold/15"
                     }
                   >
-                    {p.isBot ? (
-                      <Bot className="h-6 w-6 text-sky" aria-hidden="true" />
-                    ) : p.avatarUrl ? (
+                    {p.avatarUrl ? (
                       <Image
                         src={p.avatarUrl}
                         alt=""
-                        width={48}
-                        height={48}
+                        width={36}
+                        height={36}
                         className="h-full w-full object-cover"
                         unoptimized
                       />
+                    ) : p.isBot ? (
+                      <Bot className="h-4 w-4 text-sky" aria-hidden="true" />
                     ) : (
-                      <Crown className="h-5 w-5 text-gold-warm" aria-hidden="true" />
+                      <Crown className="h-4 w-4 text-gold-warm" aria-hidden="true" />
                     )}
                   </div>
-                  <span className="flex-1 font-display text-lg font-bold text-foreground">
+                  <span className="flex-1 truncate font-display text-sm font-bold text-foreground">
                     {p.pseudo}
                   </span>
                   {p.isBot ? (
                     <>
-                      <span className="rounded-full bg-sky/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky">
+                      <span className="rounded-full bg-sky/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-sky">
                         Bot
                       </span>
                       {status === "waiting" && (
@@ -719,7 +471,7 @@ export function TvHostRoom({
                           aria-label={`Retirer ${p.pseudo}`}
                           className="text-foreground/40 transition-colors hover:text-buzz disabled:opacity-50"
                         >
-                          <MinusCircle className="h-4 w-4" aria-hidden="true" />
+                          <MinusCircle className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
                       )}
                     </>
@@ -727,8 +479,8 @@ export function TvHostRoom({
                     <span
                       className={
                         p.isConnected
-                          ? "rounded-full bg-life-green/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-life-green"
-                          : "rounded-full bg-buzz/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-buzz"
+                          ? "rounded-full bg-life-green/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-life-green"
+                          : "rounded-full bg-buzz/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-buzz"
                       }
                     >
                       {p.isConnected ? "En ligne" : "Hors ligne"}
@@ -739,23 +491,19 @@ export function TvHostRoom({
             </ul>
           )}
 
-          {/* Vague S3 — Bouton "Ajouter un bot" + sélecteur de niveau.
-              Visible en lobby tant qu'on a moins de 8 joueurs. Permet
-              de compléter à 4 quand pas assez d'humains sont
-              connectés. Niveau : facile (40%) / moyen (70%) / difficile
-              (90%). */}
+          {/* Bouton "Ajouter un bot" + niveau (compact) */}
           {status === "waiting" && playersWithPresence.length < 8 && (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+            <div className="flex shrink-0 gap-2">
               <button
                 type="button"
                 onClick={handleAddBot}
                 disabled={botBusy}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border-2 border-dashed border-sky/50 bg-card px-4 py-2 text-sm font-bold text-sky transition-all hover:-translate-y-px hover:border-sky hover:bg-sky/5 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border-2 border-dashed border-sky/50 bg-card px-3 py-1.5 text-xs font-bold text-sky transition-all hover:-translate-y-px hover:border-sky hover:bg-sky/5 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {botBusy ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                 ) : (
-                  <Bot className="h-4 w-4" aria-hidden="true" />
+                  <Bot className="h-3.5 w-3.5" aria-hidden="true" />
                 )}
                 Ajouter un bot
               </button>
@@ -766,27 +514,22 @@ export function TvHostRoom({
                 }
                 disabled={botBusy}
                 aria-label="Niveau du bot"
-                className="rounded-md border-2 border-sky/30 bg-card px-3 py-2 text-sm font-semibold text-sky disabled:opacity-50"
+                className="rounded-md border-2 border-sky/30 bg-card px-2 py-1.5 text-xs font-semibold text-sky disabled:opacity-50"
               >
-                <option value="easy">Facile (40%)</option>
-                <option value="medium">Moyen (70%)</option>
-                <option value="hard">Difficile (90%)</option>
+                <option value="easy">Facile</option>
+                <option value="medium">Moyen</option>
+                <option value="hard">Difficile</option>
               </select>
             </div>
           )}
 
-          {/* S2 — Vague S : un seul bouton "Démarrer la partie" qui lance
-              le Mode 12 Coups TV (Coup d'Envoi → Coup par Coup →
-              Face-à-Face → Podium avec système de vies + duels). Les
-              modes legacy (handleStart) et face-à-face direct
-              (handleStartFaceAFace) restent disponibles côté code mais
-              ne sont plus exposés depuis l'UI. */}
+          {/* Bouton Démarrer (toujours visible en bas) */}
           <Button
             variant="gold"
             size="lg"
             disabled={!canStart || startingDc || status !== "waiting"}
             onClick={handleStartDouzeCoups}
-            className="mt-auto text-lg"
+            className="shrink-0 text-base"
           >
             {startingDc ? (
               <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
@@ -795,14 +538,19 @@ export function TvHostRoom({
             )}
             {status === "playing" ? "Partie en cours…" : "Démarrer la partie"}
           </Button>
-          {!canStart && status === "waiting" && (
-            <p className="text-center text-xs text-foreground/50">
-              4 joueurs requis pour démarrer (ajoute des bots si moins
-              d&apos;humains).
-            </p>
-          )}
         </section>
       </div>
+
+      {/* Carrousel en bandeau bas (très compact) — n'affiche qu'en lobby. */}
+      {status === "waiting" && (
+        <div className="shrink-0">
+          <WaitingCarousel
+            seed={code}
+            quizPreview={quizPreview}
+            intervalMs={7000}
+          />
+        </div>
+      )}
       {/* H4.3 — Modal "Mettre fin à la partie" en remplacement du
           window.confirm natif. */}
       <ConfirmDialog
@@ -815,304 +563,6 @@ export function TvHostRoom({
         confirmLabel={ending ? "Fermeture…" : "Mettre fin"}
         confirmVariant="danger"
       />
-    </main>
-  );
-}
-
-// ============================================================================
-// useTokenPseudoCache : map token → pseudo
-// ============================================================================
-// P1.1 — Maintenant qu'on a `token` directement dans la liste players (issu
-// de la query server + Realtime postgres_changes), ce cache est juste un
-// dérivé de l'array. On garde la signature ref-style pour ne pas casser
-// les callers existants (TvPlayingView, TvResultsView).
-function useTokenPseudoCache(
-  _roomId: string,
-  players: Array<{ token: string; pseudo: string }>,
-) {
-  const cache = useRef<Map<string, string>>(new Map());
-  useEffect(() => {
-    cache.current.clear();
-    for (const p of players) cache.current.set(p.token, p.pseudo);
-  }, [players]);
-  return cache;
-}
-
-// ============================================================================
-// TvPlayingView : grand écran avec question + scores + qui joue
-// ============================================================================
-function TvPlayingView({
-  code,
-  game,
-  players,
-  tokenCache,
-  onEnd,
-}: {
-  code: string;
-  game: TvGameState;
-  players: Array<{
-    id: string;
-    pseudo: string;
-    avatarUrl: string | null;
-    token?: string;
-  }>;
-  tokenCache: Map<string, string>;
-  onEnd: () => void;
-}) {
-  const q = game.questions[game.currentQuestionIdx];
-  const currentPseudo = game.currentPlayerToken
-    ? tokenCache.get(game.currentPlayerToken)
-    : "?";
-  const currentPlayer = useMemo(
-    () =>
-      players.find(
-        (p) =>
-          p.token === game.currentPlayerToken ||
-          tokenCache.get(game.currentPlayerToken ?? "") === p.pseudo,
-      ),
-    [players, game.currentPlayerToken, tokenCache],
-  );
-
-  // P4.1 — Animation "À toi, [Joueur]" 1.6s à chaque changement de tour.
-  //
-  // S1.1 — Bug corrigé : avant, on utilisait un `lastAnnouncedRef` pour
-  // dédupliquer. Mais en React 18 Strict Mode (dev), l'effect s'exécute
-  // deux fois consécutivement : le 1er run pose le ref, schedule le
-  // timer ; le cleanup annule le timer ; le 2e run voit le ref déjà
-  // posé et retourne tôt SANS planifier un nouveau timer → l'animation
-  // restait figée indéfiniment. Fix : retirer la dédup par ref. Les
-  // deps `[currentPlayerToken]` suffisent : l'effect ne re-run que si
-  // le token change réellement (en prod) ; en strict mode dev, le 2e
-  // run re-lance bien un timer après le cleanup du 1er.
-  const [announcing, setAnnouncing] = useState(false);
-  useEffect(() => {
-    const tk = game.currentPlayerToken;
-    if (!tk) return;
-    setAnnouncing(true);
-    const id = window.setTimeout(() => setAnnouncing(false), 1600);
-    return () => window.clearTimeout(id);
-  }, [game.currentPlayerToken]);
-
-  return (
-    <main className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-6 p-6 lg:p-10">
-      <AnimatePresence>
-        {announcing && currentPseudo && (
-          <motion.div
-            key={`ann-${game.currentPlayerToken}`}
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.1 }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/80 backdrop-blur-sm"
-          >
-            <div className="flex flex-col items-center gap-4 text-center">
-              {currentPlayer?.avatarUrl ? (
-                <Image
-                  src={currentPlayer.avatarUrl}
-                  alt=""
-                  width={160}
-                  height={160}
-                  className="h-32 w-32 rounded-3xl border-4 border-gold object-cover shadow-[0_0_64px_rgba(245,183,0,0.7)] sm:h-40 sm:w-40"
-                  unoptimized
-                />
-              ) : (
-                <div className="flex h-32 w-32 items-center justify-center rounded-3xl border-4 border-gold bg-gold/30 shadow-[0_0_64px_rgba(245,183,0,0.7)] sm:h-40 sm:w-40">
-                  <Crown className="h-16 w-16 text-gold-warm" aria-hidden="true" />
-                </div>
-              )}
-              <p className="text-xl font-bold uppercase tracking-widest text-gold">
-                À toi
-              </p>
-              <p className="font-display text-6xl font-extrabold text-background sm:text-7xl">
-                {currentPseudo}
-              </p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <header className="flex items-center justify-between text-foreground">
-        <p className="text-sm font-bold uppercase tracking-widest text-gold-warm">
-          Partie {code} · Tour {game.currentRound + 1} / {game.totalRounds}
-        </p>
-        <button
-          type="button"
-          onClick={onEnd}
-          className="inline-flex items-center gap-1.5 rounded-md border border-buzz/30 bg-card px-3 py-1.5 text-xs font-semibold text-buzz hover:bg-buzz/10"
-        >
-          <X className="h-3.5 w-3.5" aria-hidden="true" />
-          Terminer
-        </button>
-      </header>
-
-      <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-        {/* Sidebar joueurs */}
-        <aside className="flex flex-col gap-2">
-          {players.map((p) => {
-            const score =
-              Object.entries(game.scores).find(
-                ([token]) => tokenCache.get(token) === p.pseudo,
-              )?.[1] ?? 0;
-            const isActive = currentPseudo === p.pseudo;
-            return (
-              <div
-                key={p.id}
-                className={
-                  isActive
-                    ? "flex items-center gap-3 rounded-2xl border-2 border-gold bg-gold/15 p-3 shadow-[0_0_24px_rgba(245,183,0,0.5)]"
-                    : "flex items-center gap-3 rounded-2xl border border-border bg-card p-3"
-                }
-              >
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gold/15">
-                  {p.avatarUrl ? (
-                    <Image
-                      src={p.avatarUrl}
-                      alt=""
-                      width={48}
-                      height={48}
-                      className="h-full w-full object-cover"
-                      unoptimized
-                    />
-                  ) : (
-                    <Crown className="h-5 w-5 text-gold-warm" aria-hidden="true" />
-                  )}
-                </div>
-                <div className="flex-1">
-                  <p className="font-display text-base font-extrabold text-foreground">
-                    {p.pseudo}
-                  </p>
-                  <p className="text-xs text-foreground/60">
-                    {score} bonne{score > 1 ? "s" : ""} réponse{score > 1 ? "s" : ""}
-                  </p>
-                </div>
-                {isActive && (
-                  <span className="rounded-full bg-gold px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-on-color">
-                    À jouer
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </aside>
-
-        {/* Question géante */}
-        <section className="flex flex-col items-center justify-center gap-8 rounded-3xl border border-gold/40 bg-gradient-to-br from-gold-pale via-cream to-sky-pale p-10 text-center glow-sun">
-          {q ? (
-            <>
-              {q.format && (
-                <span className="rounded-full bg-gold/20 px-4 py-1 text-sm font-bold uppercase tracking-widest text-gold-warm">
-                  {q.format}
-                </span>
-              )}
-              <h2 className="font-display text-3xl font-extrabold text-foreground lg:text-5xl">
-                {q.enonce}
-              </h2>
-              <div className="grid w-full max-w-3xl gap-3 sm:grid-cols-2">
-                {q.choices.map((c) => (
-                  <div
-                    key={c.idx}
-                    className="flex items-center gap-3 rounded-xl border-2 border-gold/30 bg-card px-6 py-5 text-left text-xl font-semibold text-foreground"
-                  >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gold/20 font-display font-extrabold text-gold-warm">
-                      {String.fromCharCode(65 + c.idx)}
-                    </span>
-                    <span className="flex-1">{c.text}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-lg font-bold text-foreground/70">
-                À toi de jouer, <span className="text-gold-warm">{currentPseudo}</span> !
-              </p>
-            </>
-          ) : (
-            <Loader2 className="h-12 w-12 animate-spin text-gold-warm" aria-hidden="true" />
-          )}
-        </section>
-      </div>
-    </main>
-  );
-}
-
-// ============================================================================
-// TvResultsView : podium final
-// ============================================================================
-function TvResultsView({
-  game,
-  players,
-  tokenCache,
-  onClose,
-}: {
-  game: TvGameState;
-  players: Array<{
-    id: string;
-    pseudo: string;
-    avatarUrl: string | null;
-  }>;
-  tokenCache: Map<string, string>;
-  onClose: () => void;
-}) {
-  const ranked = useMemo(() => {
-    const arr = players.map((p) => {
-      const token = Array.from(tokenCache.entries()).find(
-        ([, pseudo]) => pseudo === p.pseudo,
-      )?.[0];
-      const score = token ? (game.scores[token] ?? 0) : 0;
-      return { ...p, score };
-    });
-    arr.sort((a, b) => b.score - a.score);
-    return arr;
-  }, [players, game.scores, tokenCache]);
-
-  return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-8 p-8 text-center">
-      <AnimEffect animation="crown" size="lg" autoCloseMs={0} />
-      <AnimEffect animation="coins-rain" size="fullscreen" autoCloseMs={2400} />
-      <div>
-        <p className="text-sm font-bold uppercase tracking-widest text-gold-warm">
-          Mode TV — Partie terminée
-        </p>
-        <h1 className="font-display text-5xl font-extrabold text-foreground">
-          {ranked[0]?.pseudo ?? "Pas de vainqueur"} gagne !
-        </h1>
-      </div>
-      <ul className="flex w-full flex-col gap-2 rounded-2xl border border-border bg-card p-5 glow-card">
-        {ranked.map((p, i) => (
-          <li
-            key={p.id}
-            className={
-              i === 0
-                ? "flex items-center gap-3 text-gold-warm"
-                : "flex items-center gap-3 text-foreground"
-            }
-          >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground/10 font-display text-base font-extrabold text-foreground">
-              {i + 1}
-            </span>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gold/15">
-              {p.avatarUrl ? (
-                <Image
-                  src={p.avatarUrl}
-                  alt=""
-                  width={40}
-                  height={40}
-                  className="h-full w-full object-cover"
-                  unoptimized
-                />
-              ) : (
-                <Crown className="h-4 w-4 text-gold-warm" aria-hidden="true" />
-              )}
-            </div>
-            <span className="flex-1 text-left font-display text-lg font-bold">
-              {p.pseudo}
-            </span>
-            <span className="text-base font-bold tabular-nums">
-              {p.score}
-            </span>
-          </li>
-        ))}
-      </ul>
-      <Button variant="gold" size="lg" onClick={onClose}>
-        Retour à l&apos;accueil
-      </Button>
     </main>
   );
 }

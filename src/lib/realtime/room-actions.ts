@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { asJsonb } from "@/lib/supabase/jsonb";
 
 /**
  * Actions Server pour gérer les rooms TV (création, lecture, mise à jour
@@ -118,21 +119,17 @@ export async function updateTvRoomState(input: {
   } = await supabase.auth.getUser();
   if (!user) return;
 
-  const fields: {
+  const update: {
     status?: "waiting" | "playing" | "paused" | "ended";
-    state?: Record<string, unknown>;
+    state?: ReturnType<typeof asJsonb>;
   } = {};
-  if (input.status) fields.status = input.status;
-  if (input.state) fields.state = input.state;
-  if (Object.keys(fields).length === 0) return;
+  if (input.status) update.status = input.status;
+  if (input.state) update.state = asJsonb(input.state);
+  if (Object.keys(update).length === 0) return;
 
-  // Cast intermédiaire pour contourner le typage Json strict — le schéma
-  // JSONB accepte tout objet sérialisable.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await supabase
     .from("tv_rooms")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .update(fields as any)
+    .update(update)
     .eq("id", input.roomId)
     .eq("host_id", user.id);
 }

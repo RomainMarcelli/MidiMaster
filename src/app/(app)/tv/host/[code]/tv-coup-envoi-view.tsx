@@ -39,8 +39,10 @@ export function TvCoupEnvoiView({
     <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
       {/* Sidebar joueurs avec barres de vie + animations Vague S6 */}
       <aside className="flex flex-col gap-3">
+        {/* Vague U (#8) — Le numéro de partie est déjà dans le header
+            principal. On garde juste le label de la phase. */}
         <p className="text-xs font-bold uppercase tracking-widest text-gold-warm">
-          Coup d&apos;Envoi · Partie {code}
+          Coup d&apos;Envoi
         </p>
         {players.map((p) => (
           <TvPlayerLifeCard

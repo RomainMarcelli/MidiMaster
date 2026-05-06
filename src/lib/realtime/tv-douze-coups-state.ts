@@ -3,20 +3,21 @@
  * avec 3 étapes enchaînées). Stocké entièrement dans `tv_rooms.state` JSONB.
  *
  * Mécanique :
- *  - Étape 1 (Coup d'Envoi) : 4 joueurs, questions quizz_4 tour par tour,
- *    système de 2 vies (vert → orange → rouge). Quand un joueur tombe au
- *    rouge, un DUEL est déclenché : il choisit un candidat, le candidat
- *    choisit 1 thème parmi 2, et répond à 1 question quizz_4. Si le
+ *  - Étape 1 (Coup d'Envoi) : 4 joueurs, questions quizz_2 (boutons A/B)
+ *    tour par tour, système de 2 vies (vert → orange → rouge). Quand un
+ *    joueur tombe au rouge, un DUEL est déclenché : il choisit un
+ *    candidat, le candidat choisit 1 thème parmi 2, et répond à 1
+ *    question quizz_4 (4 choix, plus difficile pour départager). Si le
  *    candidat a bon → X éliminé. Sinon → X reste rouge mais survit.
  *  - Étape 2 (Coup par Coup) : 3 survivants, questions coup_par_coup
- *    (intrus parmi 7 propositions), même système de vies + duels.
+ *    (intrus parmi 7 propositions), même système de vies + duels (quizz_4).
  *  - Étape 3 (Face-à-Face) : 2 finalistes, géré par le module P5
  *    (face-a-face-state.ts) — déclenché automatiquement à la fin du
  *    Coup par Coup.
  *
- * Ce fichier est volontairement séparé du legacy `tv-game-state.ts` qui
- * gérait un mode TV simplifié (10 questions quizz_2). Le legacy peut
- * disparaître quand la migration sera complète.
+ * Vague T — Le mode TV legacy quizz_2 (`tv-game-state.ts`, `tv-game-actions.ts`)
+ * a été supprimé. Le 12 Coups TV est désormais le seul mode TV. La phase
+ * Coup d'Envoi utilise des questions quizz_2 pour les boutons A/B.
  */
 
 export type LifeStatus = "green" | "orange" | "red";
@@ -41,12 +42,18 @@ export type TvGamePhase =
   // Final
   | "podium";
 
-/** Question quizz_4 (utilisée pour Coup d'Envoi + duels). */
+/**
+ * Question type quizz (2 ou 4 choix). Vague T : utilisée pour Coup d'Envoi
+ * (quizz_2, A/B) et pour les duels (quizz_4, A/B/C/D). Le format diffère
+ * uniquement par le nombre de `choices` ; le parser et l'affichage sont
+ * identiques.
+ */
 export interface QuizzQuestion {
   id: string;
   enonce: string;
   format?: string | null;
-  /** 4 choix avec un seul correct. Le correctIdx ne doit pas être broadcast. */
+  /** N choix avec un seul correct (N=2 pour Coup d'Envoi, N=4 pour duels).
+   *  Le correctIdx ne doit pas être broadcast aux téléphones. */
   choices: Array<{ idx: number; text: string }>;
   correctIdx: number;
   explication?: string | null;
@@ -123,7 +130,7 @@ export interface TvDouzeCoupsState {
   turnOrder: string[];
   /** Index dans turnOrder (joueur dont c'est le tour). */
   currentPlayerIdx: number;
-  /** Question en cours d'affichage (Coup d'Envoi : quizz_4 ; CPC : coup_par_coup). */
+  /** Question en cours d'affichage (Coup d'Envoi : quizz_2 ; CPC : coup_par_coup ; duels : quizz_4). */
   currentQuestion: QuizzQuestion | CpcQuestion | null;
   /** Données du duel en cours (null si phase normale). */
   currentDuel: PendingDuel | null;
