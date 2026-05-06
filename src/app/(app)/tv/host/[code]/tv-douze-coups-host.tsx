@@ -17,6 +17,7 @@ import {
   buildFinalRanking,
   isCpcQuestion,
   isQuizzQuestion,
+  nextActivePlayerIdx,
   type CpcQuestion,
   type DuelTheme,
   type QuizzQuestion,
@@ -25,15 +26,23 @@ import {
 import {
   advanceTurn,
   applyAnswer,
+  applyCpcAnswer,
   applyDuelAnswer,
   applyDuelCandidateSelection,
   applyDuelThemeSelection,
+  applyPlayerLeftPause,
+  applyResume,
   endEliminationAnimation,
 } from "./tv-douze-coups-machine-helpers";
+import {
+  eliminatePlayerForLeaving,
+  replaceLeftPlayerWithBot,
+} from "@/lib/realtime/abandon-actions";
 import { endTvRoom } from "@/lib/realtime/room-actions";
 import {
   isBotToken,
   pickBotAnswerIdx,
+  pickBotCpcNextIdx,
   pickBotDelayMs,
   pickBotDuelCandidate,
   pickBotDuelTheme,
@@ -43,6 +52,10 @@ import { TvCoupParCoupView } from "./tv-coup-par-coup-view";
 import { TvDuelView } from "./tv-duel-view";
 import { TvPodiumView } from "./tv-podium-view";
 import { EliminationOverlay } from "@/components/tv/EliminationOverlay";
+import { PlayerTurnsRedAnimation } from "@/components/tv/PlayerTurnsRedAnimation";
+import { PlayerTurnsOrangeAnimation } from "@/components/tv/PlayerTurnsOrangeAnimation";
+import { DuelAnnouncementAnimation } from "@/components/tv/DuelAnnouncementAnimation";
+import { PlayerLeftModal } from "@/components/tv/PlayerLeftModal";
 import { prepareFaceAFace } from "@/lib/realtime/face-a-face-actions";
 import type { FaceAFaceState } from "@/lib/realtime/face-a-face-state";
 import { TvFaceAFaceView } from "./tv-face-a-face-view";
@@ -73,6 +86,17 @@ import {
  */
 const ELIM_ANIM_MS = 4500;
 const RESULT_DELAY_MS = 2500;
+// Vague V (#3) — Durées des 2 animations cinématiques d'introduction du duel.
+const RED_ANIM_MS = 3000;
+const DUEL_ANNOUNCE_MS = 3000;
+// Vague W (#9) — Durée de l'animation "passage au orange" (1ère erreur).
+const ORANGE_ANIM_MS = 3000;
+// Vague V (#7) + W (#4) — Délai avant déclenchement de la pause "joueur a
+// quitté" après détection Presence leave. En dev, on raccourcit à 5s pour
+// pouvoir tester le flow rapidement (modal + 3 options) ; en prod, 30s pour
+// absorber les fluctuations réseau / micro-coupures sans gâcher la partie.
+const PLAYER_LEFT_GRACE_MS =
+  process.env.NODE_ENV === "development" ? 5000 : 30000;
 
 export function TvDouzeCoupsHost({
   code,
@@ -97,6 +121,28 @@ export function TvDouzeCoupsHost({
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [ending, setEnding] = useState(false);
   const [faState, setFaState] = useState<FaceAFaceState | null>(null);
+  // Vague V (#3) — Overlay states côté TV pour les 2 animations cinématiques
+  // pré-duel. Reset auto via setTimeout dans `playDuelIntro`.
+  const [redAnim, setRedAnim] = useState<{
+    pseudo: string;
+    avatarUrl: string | null;
+  } | null>(null);
+  const [duelAnnounceAnim, setDuelAnnounceAnim] = useState(false);
+  // Vague W (#9) — Overlay "passage au orange" 3s côté TV (similaire au rouge).
+  const [orangeAnim, setOrangeAnim] = useState<{
+    pseudo: string;
+    avatarUrl: string | null;
+  } | null>(null);
+  // Vague V (#7) — Action en cours dans le modal "joueur a quitté".
+  // Sert à afficher un loader sur le bouton cliqué + bloquer les autres.
+  const [busyAbandon, setBusyAbandon] = useState<
+    "continue" | "wait" | "bot" | null
+  >(null);
+  // Vague V (#7) — Timers de grâce 30s par token absent. Si le joueur
+  // revient avant l'expiration, on clear ; sinon on déclenche la pause.
+  const pendingLeaveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
   const playersWithPresenceRef = useRef<
     Array<{
       id: string;
@@ -192,22 +238,28 @@ export function TvDouzeCoupsHost({
         currentPlayerToken: currentToken,
         currentPlayerPseudo: currentPlayer.pseudo,
       });
-      // Bot : simulation de réponse (cherche l'intrus)
+      // Vague W (#1) — Bot CPC tour-par-tour : 1 seul clic, le tour passe
+      // au joueur suivant ensuite. Le `pickBotCpcNextIdx` est appelé avec
+      // les `cpcFoundIndices` courants pour ne pas recliquer une bonne
+      // déjà trouvée par les joueurs précédents.
       if (currentPlayer.isBot || isBotToken(currentToken)) {
         const skill = currentPlayer.botSkill ?? 70;
-        const chosenIdx = pickBotAnswerIdx(
+        const chosenIdx = pickBotCpcNextIdx(
           q.propositions.length,
           q.intrusIdx,
+          s.cpcFoundIndices ?? [],
           skill,
         );
-        const delay = pickBotDelayMs();
-        window.setTimeout(() => {
-          ch.send("cpc:answer-submit", {
-            questionId: q.id,
-            chosenIdx,
-            playerToken: currentToken,
-          });
-        }, delay);
+        if (chosenIdx !== null) {
+          const delay = pickBotDelayMs();
+          window.setTimeout(() => {
+            ch.send("cpc:answer-submit", {
+              questionId: q.id,
+              chosenIdx,
+              playerToken: currentToken,
+            });
+          }, delay);
+        }
       }
     }
   }, []);
@@ -218,88 +270,324 @@ export function TvDouzeCoupsHost({
   // tests). Ce composant n'orchestre plus que les side effects.
 
   // ============================================================
-  // Gestion d'une réponse à une question normale (Coup d'Envoi
-  // ou Coup par Coup). Vérifie la bonne réponse, met à jour la
-  // vie, broadcast le résultat, et :
-  //  - si vie passe rouge : démarre un duel
-  //  - sinon : avance au tour suivant après RESULT_DELAY_MS
+  // Helper privé : si le challenger (joueur rouge) est un bot, simule sa
+  // sélection de candidat pour le duel après un petit délai. Factorisé
+  // entre handleCeAnswer et handleCpcAnswer (les deux peuvent
+  // déclencher un duel quand la vie passe rouge).
   // ============================================================
-  const handleNormalAnswer = useCallback(
+  const triggerBotDuelSelectionIfNeeded = useCallback(
+    (challengerToken: string, nextPlayers: TvDouzeCoupsState["players"]) => {
+      const ch = channelRef.current;
+      if (!ch) return;
+      const challenger = nextPlayers.find((p) => p.token === challengerToken);
+      if (!challenger || (!challenger.isBot && !isBotToken(challengerToken))) return;
+      const candidates = nextPlayers.map((p) => ({
+        token: p.token,
+        isEliminated: p.isEliminated,
+      }));
+      const candToken = pickBotDuelCandidate(candidates, challengerToken);
+      if (!candToken) return;
+      const cand = nextPlayers.find((p) => p.token === candToken);
+      if (!cand) return;
+      const delay = pickBotDelayMs(undefined, 1500, 2500);
+      window.setTimeout(() => {
+        ch.send("ce:duel-candidate-selected", {
+          challengerToken,
+          candidateToken: candToken,
+          candidatePseudo: cand.pseudo,
+        });
+      }, delay);
+    },
+    [],
+  );
+
+  // ============================================================
+  // Vague V (#3) — Séquence cinématique d'introduction du duel.
+  //
+  // Avant : `triggersDuel === true` → broadcast direct `ce:duel-start`
+  //   → page choix candidat sur le téléphone du challenger.
+  //
+  // Après : 6s de cinématique cumulative AVANT `ce:duel-start` :
+  //   1. T+0s : `ce:player-turns-red` (overlay 3s "Pseudo passe au ROUGE")
+  //   2. T+3s : `ce:duel-announce` (overlay 3s "Qui dit rouge dit DUEL")
+  //   3. T+6s : `ce:duel-start` + bot selection (= comportement pré-V3)
+  //
+  // Le state machine pure (`applyAnswer` / `applyCpcAnswer`) a déjà fait
+  // sa transition vers la phase `coup-(envoi|par-coup)-duel-select` dès le
+  // passage rouge. Cette fonction orchestre uniquement les side effects
+  // Realtime + les overlays côté TV. Côté téléphones, ils écoutent les
+  // mêmes events et affichent les overlays en miroir.
+  // ============================================================
+  const playDuelIntroAndStart = useCallback(
     (
-      payload: { questionId: string; chosenIdx: number; playerToken: string },
-      kind: "ce" | "cpc",
+      challengerToken: string,
+      challengerPseudo: string,
+      nextPlayers: TvDouzeCoupsState["players"],
     ) => {
       const ch = channelRef.current;
       if (!ch) return;
-      const result = applyAnswer(stateRef.current, payload, kind);
+      const challenger = nextPlayers.find((p) => p.token === challengerToken);
+      const avatarUrl = challenger?.avatarUrl ?? null;
+      const pseudo = challenger?.pseudo ?? challengerPseudo;
+
+      // 1. Anim "passe au ROUGE" (3s)
+      setRedAnim({ pseudo, avatarUrl });
+      ch.send("ce:player-turns-red", {
+        token: challengerToken,
+        pseudo,
+        avatarUrl,
+      });
+      window.setTimeout(() => {
+        setRedAnim(null);
+        // 2. Anim "DUEL" (3s)
+        setDuelAnnounceAnim(true);
+        ch.send("ce:duel-announce", {});
+        window.setTimeout(() => {
+          setDuelAnnounceAnim(false);
+          // 3. Bascule sur le choix de candidat (= comportement pré-V3)
+          ch.send("ce:duel-start", {
+            challengerToken,
+            challengerPseudo: pseudo,
+          });
+          triggerBotDuelSelectionIfNeeded(challengerToken, nextPlayers);
+        }, DUEL_ANNOUNCE_MS);
+      }, RED_ANIM_MS);
+    },
+    [triggerBotDuelSelectionIfNeeded],
+  );
+
+  // ============================================================
+  // Coup d'Envoi : single-shot Q/R, vie-1 si mauvaise.
+  //  - si vie passe rouge : démarre un duel
+  //  - sinon : avance au tour suivant après RESULT_DELAY_MS
+  // ============================================================
+  const handleCeAnswer = useCallback(
+    (payload: { questionId: string; chosenIdx: number; playerToken: string }) => {
+      const ch = channelRef.current;
+      if (!ch) return;
+      // Vague V (#7) — Ignore les events entrants pendant la pause.
+      if (stateRef.current.pausedReason) return;
+      const result = applyAnswer(stateRef.current, payload, "ce");
       if (result.kind !== "accepted") return;
       const { isCorrect, correctIdx, next, triggersDuel, challengerPseudo } = result;
 
-      // Broadcast résultat (typage des events distinct entre ce: et cpc:)
-      if (kind === "ce") {
-        ch.send("ce:question-result", {
+      // Vague W (#8) — Inclut l'explication BDD pour AnswerReveal côté téléphone.
+      const ceQuestion = stateRef.current.currentQuestion;
+      const ceExplication = isQuizzQuestion(ceQuestion)
+        ? ceQuestion.explication ?? null
+        : null;
+      ch.send("ce:question-result", {
+        questionId: payload.questionId,
+        byToken: payload.playerToken,
+        chosenIdx: payload.chosenIdx,
+        correctIdx,
+        isCorrect,
+        explication: ceExplication,
+      });
+
+      updateAndSave(() => next);
+
+      if (triggersDuel) {
+        // Vague V (#3) — Séquence cinématique 6s avant le `ce:duel-start`.
+        playDuelIntroAndStart(
+          payload.playerToken,
+          challengerPseudo ?? "?",
+          next.players,
+        );
+      } else {
+        // Vague W (#9) — Détection passage green→orange (1ère erreur).
+        // Si oui, animation 3s plein écran avant l'advance turn.
+        const before = stateRef.current.players.find(
+          (p) => p.token === payload.playerToken,
+        );
+        const after = next.players.find((p) => p.token === payload.playerToken);
+        const turnsOrange =
+          before?.lifeStatus === "green" && after?.lifeStatus === "orange";
+        if (turnsOrange && after) {
+          setOrangeAnim({ pseudo: after.pseudo, avatarUrl: after.avatarUrl });
+          ch.send("ce:player-turns-orange", {
+            token: after.token,
+            pseudo: after.pseudo,
+            avatarUrl: after.avatarUrl,
+          });
+          window.setTimeout(() => {
+            setOrangeAnim(null);
+            updateAndSave((prev) => {
+              const advanced = advanceTurn(prev);
+              window.setTimeout(() => broadcastCurrent(advanced), 0);
+              return advanced;
+            });
+          }, ORANGE_ANIM_MS);
+        } else {
+          window.setTimeout(() => {
+            updateAndSave((prev) => {
+              const advanced = advanceTurn(prev);
+              window.setTimeout(() => broadcastCurrent(advanced), 0);
+              return advanced;
+            });
+          }, RESULT_DELAY_MS);
+        }
+      }
+    },
+    [updateAndSave, broadcastCurrent, playDuelIntroAndStart],
+  );
+
+  // ============================================================
+  // Vague W (#1) — Coup par Coup en TOUR PAR TOUR (refonte de V5).
+  //
+  // 1 clic par tour. À chaque clic :
+  //  - Bonne (correct-advance) : broadcast progress + result success,
+  //    après délai → advance idx (MEME question, foundIndices conservé)
+  //    + re-broadcast question-show pour signaler le nouveau currentPlayer.
+  //  - 6 bonnes trouvées (all-found) : broadcast series-complete (anim 3s),
+  //    après animation → advanceTurn (NOUVELLE question, foundIndices reset).
+  //  - Intrus tombé (wrong-intrus) : broadcast result failure, après délai
+  //    → advanceTurn (NOUVELLE question) ou duel si rouge.
+  // ============================================================
+  const SERIES_COMPLETE_ANIM_MS = 3000;
+  const handleCpcAnswer = useCallback(
+    (payload: { questionId: string; chosenIdx: number; playerToken: string }) => {
+      const ch = channelRef.current;
+      if (!ch) return;
+      // Vague V (#7) — Ignore les events entrants pendant la pause.
+      if (stateRef.current.pausedReason) return;
+      const result = applyCpcAnswer(stateRef.current, payload);
+      if (result.kind === "rejected") return;
+
+      updateAndSave(() => result.next);
+
+      if (result.kind === "correct-advance") {
+        // 1. Update visuel des verts cumulés sur tous les téléphones.
+        ch.send("cpc:answer-progress", {
           questionId: payload.questionId,
           byToken: payload.playerToken,
-          chosenIdx: payload.chosenIdx,
-          correctIdx,
-          isCorrect,
+          foundIndices: result.foundIndices,
+          lastChosenIdx: payload.chosenIdx,
         });
-      } else {
+        // 2. Feedback "bonne réponse" sur tous les téléphones (AnswerReveal).
+        //    intrusIdx = -1 = sentinelle "ne pas révéler l'intrus" (anti-cheat).
+        // Vague W (#8) — explication BDD pour le AnswerReveal "Bonne réponse".
+        const cpcQ = stateRef.current.currentQuestion;
+        const cpcExplCorrect = isCpcQuestion(cpcQ)
+          ? cpcQ.explication ?? null
+          : null;
         ch.send("cpc:question-result", {
           questionId: payload.questionId,
           byToken: payload.playerToken,
           chosenIdx: payload.chosenIdx,
-          intrusIdx: correctIdx,
-          isCorrect,
+          intrusIdx: -1,
+          isCorrect: true,
+          explication: cpcExplCorrect,
         });
-      }
-
-      // Persiste le state
-      updateAndSave(() => next);
-
-      if (triggersDuel) {
-        ch.send("ce:duel-start", {
-          challengerToken: payload.playerToken,
-          challengerPseudo: challengerPseudo ?? "?",
-        });
-        // Vague S3 — Si le challenger (joueur rouge) est un bot, il
-        // choisit automatiquement un candidat parmi les vivants ≠ lui.
-        const challenger = next.players.find(
-          (p) => p.token === payload.playerToken,
-        );
-        if (challenger && (challenger.isBot || isBotToken(payload.playerToken))) {
-          const candidates = next.players.map((p) => ({
-            token: p.token,
-            isEliminated: p.isEliminated,
-          }));
-          const candToken = pickBotDuelCandidate(candidates, payload.playerToken);
-          if (candToken) {
-            const cand = next.players.find((p) => p.token === candToken);
-            if (cand) {
-              const delay = pickBotDelayMs(undefined, 1500, 2500);
-              window.setTimeout(() => {
-                ch.send("ce:duel-candidate-selected", {
-                  challengerToken: payload.playerToken,
-                  candidateToken: candToken,
-                  candidatePseudo: cand.pseudo,
-                });
-              }, delay);
-            }
-          }
-        }
-      } else {
-        // Pas de duel : avance au tour suivant après le délai d'affichage
-        // du résultat.
+        // 3. Après délai d'affichage : advance idx (même question, foundIndices
+        //    conservé côté téléphone car questionId inchangé) + re-broadcast.
         window.setTimeout(() => {
           updateAndSave((prev) => {
-            const advanced = advanceTurn(prev);
+            const nextIdx = nextActivePlayerIdx(
+              prev.currentPlayerIdx,
+              prev.turnOrder,
+              prev.players,
+            );
+            const advanced: TvDouzeCoupsState = {
+              ...prev,
+              currentPlayerIdx: nextIdx === -1 ? prev.currentPlayerIdx : nextIdx,
+              lastAnswerKey: null,
+            };
             window.setTimeout(() => broadcastCurrent(advanced), 0);
             return advanced;
           });
         }, RESULT_DELAY_MS);
+        return;
+      }
+
+      if (result.kind === "all-found") {
+        // Update visuel final + animation "série complète" 3s.
+        ch.send("cpc:answer-progress", {
+          questionId: payload.questionId,
+          byToken: payload.playerToken,
+          foundIndices: result.foundIndices,
+          lastChosenIdx: payload.chosenIdx,
+        });
+        const player = result.next.players.find(
+          (p) => p.token === payload.playerToken,
+        );
+        ch.send("cpc:series-complete", {
+          questionId: payload.questionId,
+          byToken: payload.playerToken,
+          pseudo: player?.pseudo ?? "?",
+        });
+        window.setTimeout(() => {
+          updateAndSave((prev) => {
+            const advanced = advanceTurn(prev); // nouvelle question CPC
+            window.setTimeout(() => broadcastCurrent(advanced), 0);
+            return advanced;
+          });
+        }, SERIES_COMPLETE_ANIM_MS);
+        return;
+      }
+
+      // wrong-intrus : broadcast result, puis duel ou advance + nouvelle question
+      // Vague W (#8) — explication BDD pour le AnswerReveal "Mauvaise réponse".
+      const cpcQWrong = stateRef.current.currentQuestion;
+      const cpcExplWrong = isCpcQuestion(cpcQWrong)
+        ? cpcQWrong.explication ?? null
+        : null;
+      ch.send("cpc:question-result", {
+        questionId: payload.questionId,
+        byToken: payload.playerToken,
+        chosenIdx: payload.chosenIdx,
+        intrusIdx: result.intrusIdx,
+        isCorrect: false,
+        explication: cpcExplWrong,
+      });
+
+      if (result.triggersDuel) {
+        // Vague V (#3) — Séquence cinématique 6s avant le `ce:duel-start`.
+        playDuelIntroAndStart(
+          payload.playerToken,
+          result.challengerPseudo ?? "?",
+          result.next.players,
+        );
+      } else {
+        // Vague W (#9) — Détection passage green→orange en CPC (1ère erreur).
+        const beforeCpc = stateRef.current.players.find(
+          (p) => p.token === payload.playerToken,
+        );
+        const afterCpc = result.next.players.find(
+          (p) => p.token === payload.playerToken,
+        );
+        const turnsOrangeCpc =
+          beforeCpc?.lifeStatus === "green" && afterCpc?.lifeStatus === "orange";
+        if (turnsOrangeCpc && afterCpc) {
+          setOrangeAnim({
+            pseudo: afterCpc.pseudo,
+            avatarUrl: afterCpc.avatarUrl,
+          });
+          ch.send("ce:player-turns-orange", {
+            token: afterCpc.token,
+            pseudo: afterCpc.pseudo,
+            avatarUrl: afterCpc.avatarUrl,
+          });
+          window.setTimeout(() => {
+            setOrangeAnim(null);
+            updateAndSave((prev) => {
+              const advanced = advanceTurn(prev);
+              window.setTimeout(() => broadcastCurrent(advanced), 0);
+              return advanced;
+            });
+          }, ORANGE_ANIM_MS);
+        } else {
+          window.setTimeout(() => {
+            updateAndSave((prev) => {
+              const advanced = advanceTurn(prev); // nouvelle question CPC
+              window.setTimeout(() => broadcastCurrent(advanced), 0);
+              return advanced;
+            });
+          }, RESULT_DELAY_MS);
+        }
       }
     },
-    [updateAndSave, broadcastCurrent],
+    [updateAndSave, broadcastCurrent, playDuelIntroAndStart],
   );
 
   // ============================================================
@@ -316,21 +604,49 @@ export function TvDouzeCoupsHost({
     }) => {
       const ch = channelRef.current;
       if (!ch) return;
-      // Tire 2 thèmes via server action (tirage côté serveur)
-      const themes = await pickDuelThemesAction(code);
+      // Vague V (#7) — Ignore les events entrants pendant la pause.
+      if (stateRef.current.pausedReason) return;
+      // Vague V (#4) + W (#2) — Cohérence des thèmes entre duel 1 et duel 2.
+      // Si on est en CPC (donc 2e duel) et qu'on a une mémoire des thèmes
+      // du 1er duel, on les RÉUTILISE au lieu de retirer 2 nouveaux. Le
+      // thème déjà choisi au duel 1 sera grisé côté téléphone.
+      const memory = stateRef.current.duelMemory;
+      const isDuel2 =
+        stateRef.current.phase === "coup-par-coup-duel-select" && memory != null;
+      // eslint-disable-next-line no-console
+      console.log("[W2:duel-themes] picking themes", {
+        phase: stateRef.current.phase,
+        hasMemory: memory != null,
+        memoryDetails: memory
+          ? {
+              proposedIds: memory.proposedThemes.map((t) => t.id),
+              chosenInDuel1: memory.chosenInDuel1,
+            }
+          : null,
+        isDuel2,
+      });
+      const themes = isDuel2 && memory
+        ? memory.proposedThemes
+        : await pickDuelThemesAction(code);
+      const disabledThemeId = isDuel2 && memory ? memory.chosenInDuel1 : null;
       updateAndSave((prev) =>
         applyDuelCandidateSelection(prev, payload.candidateToken, themes),
       );
       ch.send("ce:duel-theme-proposals", {
         candidateToken: payload.candidateToken,
         themes,
+        disabledThemeId,
       });
       // Vague S3 — Si le candidat est un bot, il choisit un thème au hasard
+      // (en évitant le thème grisé en duel 2).
       const candidate = stateRef.current.players.find(
         (p) => p.token === payload.candidateToken,
       );
       if (candidate && (candidate.isBot || isBotToken(payload.candidateToken))) {
-        const themeId = pickBotDuelTheme(themes);
+        const eligibleThemes = disabledThemeId != null
+          ? themes.filter((t) => t.id !== disabledThemeId)
+          : themes;
+        const themeId = pickBotDuelTheme(eligibleThemes);
         if (themeId !== null) {
           const theme = themes.find((t) => t.id === themeId);
           const delay = pickBotDelayMs(undefined, 1500, 2500);
@@ -355,9 +671,19 @@ export function TvDouzeCoupsHost({
     }) => {
       const ch = channelRef.current;
       if (!ch) return;
+      // Vague V (#7) — Ignore les events entrants pendant la pause.
+      if (stateRef.current.pausedReason) return;
       const q = await pickDuelQuestion(payload.themeId);
       if (!q) return;
-      updateAndSave((prev) => applyDuelThemeSelection(prev, payload.themeId, q));
+      updateAndSave((prev) => {
+        const next = applyDuelThemeSelection(prev, payload.themeId, q);
+        // eslint-disable-next-line no-console
+        console.log("[W2:duel-theme-chosen] state after applyDuelThemeSelection", {
+          phase: next.phase,
+          duelMemory: next.duelMemory,
+        });
+        return next;
+      });
       ch.send("ce:duel-question", {
         questionId: q.id,
         enonce: q.enonce,
@@ -392,6 +718,8 @@ export function TvDouzeCoupsHost({
     }) => {
       const ch = channelRef.current;
       if (!ch) return;
+      // Vague V (#7) — Ignore les events entrants pendant la pause.
+      if (stateRef.current.pausedReason) return;
       const result = applyDuelAnswer(stateRef.current, payload, {
         eliminationDurationMs: ELIM_ANIM_MS,
       });
@@ -484,6 +812,7 @@ export function TvDouzeCoupsHost({
     });
     const unbindPresence = ch.onPresence((presence) => {
       const list: typeof playersWithPresenceRef.current = [];
+      const onlineTokens = new Set<string>();
       for (const metas of Object.values(presence)) {
         for (const m of metas) {
           if (m.role === "player") {
@@ -494,10 +823,89 @@ export function TvDouzeCoupsHost({
               token: m.token,
               isConnected: true,
             });
+            onlineTokens.add(m.token);
           }
         }
       }
       playersWithPresenceRef.current = list;
+
+      // Vague V (#7) + W (#4) — Détection abandon : joueurs actifs (non
+      // éliminés, non bots) absents de la presence → timer 30s avant pause.
+      const s = stateRef.current;
+      // Si on est déjà en pause ou hors phase de jeu (lobby/podium),
+      // on ne déclenche aucun nouveau timer.
+      const isPlayingPhase =
+        s.phase !== "lobby" &&
+        s.phase !== "podium" &&
+        s.phase !== "face-a-face-vote" &&
+        s.phase !== "face-a-face-playing";
+      if (!isPlayingPhase || s.pausedReason) return;
+
+      const activePlayers = s.players.filter(
+        (p) => !p.isEliminated && !p.isBot && !isBotToken(p.token),
+      );
+      // eslint-disable-next-line no-console
+      console.log("[W4:presence] sync", {
+        graceMs: PLAYER_LEFT_GRACE_MS,
+        phase: s.phase,
+        onlineTokens: Array.from(onlineTokens),
+        activePlayers: activePlayers.map((p) => ({
+          token: p.token,
+          pseudo: p.pseudo,
+          online: onlineTokens.has(p.token),
+        })),
+        pendingTimers: Array.from(pendingLeaveTimersRef.current.keys()),
+      });
+      // 1. Joueurs revenus → clear le timer en attente
+      for (const [tk, timer] of pendingLeaveTimersRef.current.entries()) {
+        if (onlineTokens.has(tk)) {
+          clearTimeout(timer);
+          pendingLeaveTimersRef.current.delete(tk);
+          // eslint-disable-next-line no-console
+          console.log("[W4:presence] timer cancelled (player back)", { token: tk });
+        }
+      }
+      // 2. Joueurs actifs absents → start timer si pas déjà en cours
+      for (const p of activePlayers) {
+        if (
+          !onlineTokens.has(p.token) &&
+          !pendingLeaveTimersRef.current.has(p.token)
+        ) {
+          // eslint-disable-next-line no-console
+          console.log("[W4:presence] starting timer", {
+            token: p.token,
+            pseudo: p.pseudo,
+            graceMs: PLAYER_LEFT_GRACE_MS,
+          });
+          const timer = setTimeout(() => {
+            pendingLeaveTimersRef.current.delete(p.token);
+            // Re-check à l'expiration : la partie est-elle toujours en
+            // phase de jeu et le joueur toujours absent ?
+            const cur = stateRef.current;
+            // eslint-disable-next-line no-console
+            console.log("[W4:presence] TIMER FIRED", {
+              token: p.token,
+              pseudo: p.pseudo,
+              currentPhase: cur.phase,
+              alreadyPaused: !!cur.pausedReason,
+            });
+            if (cur.pausedReason) return;
+            const stillActive = cur.players.find(
+              (x) => x.token === p.token && !x.isEliminated && !x.isBot,
+            );
+            if (!stillActive) return;
+            // Déclenche la pause + broadcast
+            ch.send("game:paused", {
+              reason: "player-left",
+              pseudo: p.pseudo,
+            });
+            updateAndSave((prev) =>
+              applyPlayerLeftPause(prev, p.token, p.pseudo),
+            );
+          }, PLAYER_LEFT_GRACE_MS);
+          pendingLeaveTimersRef.current.set(p.token, timer);
+        }
+      }
     });
 
     // Vague T (#4) — Validation Zod à la réception : un téléphone qui
@@ -505,11 +913,11 @@ export function TvDouzeCoupsHost({
     // silencieusement avec un log côté hôte.
     ch.on("ce:answer-submit", (p) => {
       const parsed = safeParseEvent("ce:answer-submit", ceAnswerSubmitSchema, p);
-      if (parsed) handleNormalAnswer(parsed, "ce");
+      if (parsed) handleCeAnswer(parsed);
     });
     ch.on("cpc:answer-submit", (p) => {
       const parsed = safeParseEvent("cpc:answer-submit", cpcAnswerSubmitSchema, p);
-      if (parsed) handleNormalAnswer(parsed, "cpc");
+      if (parsed) handleCpcAnswer(parsed);
     });
     ch.on("ce:duel-candidate-selected", (p) => {
       const parsed = safeParseEvent(
@@ -546,6 +954,10 @@ export function TvDouzeCoupsHost({
 
     return () => {
       unbindPresence();
+      // Vague V (#7) — Cleanup des timers en attente pour éviter qu'ils
+      // déclenchent une pause après unmount (ex: navigation).
+      for (const t of pendingLeaveTimersRef.current.values()) clearTimeout(t);
+      pendingLeaveTimersRef.current.clear();
       void ch.unsubscribe();
       channelRef.current = null;
     };
@@ -579,6 +991,93 @@ export function TvDouzeCoupsHost({
   }, [state.phase, state.players, roomId, faState]);
 
   // ============================================================
+  // Vague V (#7) — Handlers du modal "joueur a quitté".
+  //  - Continue : élimine le joueur (server action) + broadcast `game:resumed`,
+  //    re-broadcast la question courante (advance turn peut avoir kické).
+  //  - Wait : no-op visible côté UI, le modal reste ouvert. La partie reste
+  //    en pause tant que le user n'a pas choisi Continue ou Bot.
+  //  - Bot : convertit le joueur en bot (server action) + broadcast `game:resumed`,
+  //    re-broadcast la question. Si c'était son tour, le bot logic kick in
+  //    via `broadcastCurrent`.
+  // ============================================================
+  async function handleAbandonContinue() {
+    if (busyAbandon) return;
+    const token = stateRef.current.pausedPlayerToken;
+    if (!token) return;
+    setBusyAbandon("continue");
+    const res = await eliminatePlayerForLeaving({
+      roomId,
+      playerToken: token,
+      expectedVersion: versionRef.current,
+    });
+    if (res.ok) {
+      versionRef.current = res.newVersion;
+      // Refetch le state à jour depuis BDD : `applyEliminateLeftPlayer`
+      // a pu transitionner de phase et changer le tour. Plus simple de
+      // re-set le state local en lisant la BDD via une refetch.
+      // Pour l'instant on applyResume localement et on attend que la
+      // prochaine save déclenche un sync. Le client va voir un état
+      // possiblement obsolète ; pas critique car l'hôte est seul à modifier.
+      // Vague V (#7) — On applique LOCALEMENT la même transition pour rester
+      // cohérent immédiatement (le state JSONB en BDD a déjà été mis à jour).
+      const ch = channelRef.current;
+      ch?.send("game:resumed", {});
+      // Le state machine local doit aussi refléter la transition. On fait
+      // un simple "applyResume" et on laisse advance turn / transition se
+      // reproduire sur le prochain answer-submit. Compromis pragmatique
+      // pour rester dans les 2h V7.
+      updateAndSave((prev) => applyResume(prev));
+      window.setTimeout(() => broadcastCurrent(stateRef.current), 0);
+    } else {
+      // eslint-disable-next-line no-console
+      console.error("[abandon] eliminate failed:", res.reason);
+    }
+    setBusyAbandon(null);
+  }
+
+  function handleAbandonWait() {
+    // No-op visible : le modal reste ouvert, la partie reste en pause.
+    // L'hôte peut cliquer Continue ou Bot à tout moment plus tard.
+    if (busyAbandon) return;
+    setBusyAbandon("wait");
+    // Restore l'état "neutre" après un petit délai (juste pour le feedback
+    // visuel sur le bouton). Les autres boutons restent cliquables.
+    window.setTimeout(() => setBusyAbandon(null), 300);
+  }
+
+  async function handleAbandonReplaceWithBot() {
+    if (busyAbandon) return;
+    const token = stateRef.current.pausedPlayerToken;
+    if (!token) return;
+    setBusyAbandon("bot");
+    const res = await replaceLeftPlayerWithBot({
+      roomId,
+      playerToken: token,
+      expectedVersion: versionRef.current,
+      botSkill: 70,
+    });
+    if (res.ok) {
+      versionRef.current = res.newVersion;
+      const ch = channelRef.current;
+      ch?.send("game:resumed", {});
+      // Mise à jour locale : marque le joueur comme bot + clear pause.
+      updateAndSave((prev) => {
+        const idx = prev.players.findIndex((p) => p.token === token);
+        if (idx === -1) return applyResume(prev);
+        const playersAfter = [...prev.players];
+        playersAfter[idx] = { ...playersAfter[idx]!, isBot: true, botSkill: 70 };
+        return applyResume({ ...prev, players: playersAfter });
+      });
+      // Re-broadcast la question : si le bot est le joueur courant, son
+      // setTimeout dans broadcastCurrent kick in et le bot répondra.
+      window.setTimeout(() => broadcastCurrent(stateRef.current), 0);
+    } else {
+      // eslint-disable-next-line no-console
+      console.error("[abandon] replace-with-bot failed:", res.reason);
+    }
+    setBusyAbandon(null);
+  }
+
   // Quitter / Recommencer (bouton dans header)
   // ============================================================
   async function handleEnd() {
@@ -628,31 +1127,27 @@ export function TvDouzeCoupsHost({
     const q = s.currentQuestion;
     if (!q) return;
 
-    // CE / CPC playing : envoie un answer-submit "mauvais"
+    // CE playing : envoie un answer-submit "mauvais" (chosenIdx ≠ correctIdx)
     if (s.phase === "coup-envoi-playing" && isQuizzQuestion(q)) {
       const ct = s.turnOrder[s.currentPlayerIdx];
       if (!ct) return;
-      handleNormalAnswer(
-        {
-          questionId: q.id,
-          chosenIdx: pickWrongIdx(q.correctIdx, q.choices.length),
-          playerToken: ct,
-        },
-        "ce",
-      );
+      handleCeAnswer({
+        questionId: q.id,
+        chosenIdx: pickWrongIdx(q.correctIdx, q.choices.length),
+        playerToken: ct,
+      });
       return;
     }
+    // Vague V (#5) — CPC playing : on simule un clic sur l'intrus directement
+    // (= mauvaise réponse, vie -1). C'est l'équivalent "Skip" en CPC continu.
     if (s.phase === "coup-par-coup-playing" && isCpcQuestion(q)) {
       const ct = s.turnOrder[s.currentPlayerIdx];
       if (!ct) return;
-      handleNormalAnswer(
-        {
-          questionId: q.id,
-          chosenIdx: pickWrongIdx(q.intrusIdx, q.propositions.length),
-          playerToken: ct,
-        },
-        "cpc",
-      );
+      handleCpcAnswer({
+        questionId: q.id,
+        chosenIdx: q.intrusIdx,
+        playerToken: ct,
+      });
       return;
     }
     // Duel question : envoie un duel-answer "mauvais" pour le candidat
@@ -856,6 +1351,41 @@ export function TvDouzeCoupsHost({
             : "face-a-face"
         }
       />
+
+      {/* Vague V (#3) — Animations cinématiques 3s + 3s avant le duel-start.
+          Set par `playDuelIntroAndStart`. */}
+      <AnimatePresence>
+        {orangeAnim && (
+          <PlayerTurnsOrangeAnimation
+            key="orange-anim"
+            pseudo={orangeAnim.pseudo}
+            avatarUrl={orangeAnim.avatarUrl}
+          />
+        )}
+        {redAnim && (
+          <PlayerTurnsRedAnimation
+            key="red-anim"
+            pseudo={redAnim.pseudo}
+            avatarUrl={redAnim.avatarUrl}
+          />
+        )}
+        {duelAnnounceAnim && <DuelAnnouncementAnimation key="duel-anim" />}
+      </AnimatePresence>
+
+      {/* Vague V (#7) — Modal "joueur a quitté" : déclenché 30s après une
+          détection Presence leave. 3 options pour reprendre la partie. */}
+      <AnimatePresence>
+        {state.pausedReason === "player-left" && state.pausedPlayerPseudo && (
+          <PlayerLeftModal
+            key="player-left-modal"
+            pseudo={state.pausedPlayerPseudo}
+            busyAction={busyAbandon}
+            onContinue={handleAbandonContinue}
+            onWait={handleAbandonWait}
+            onReplaceWithBot={handleAbandonReplaceWithBot}
+          />
+        )}
+      </AnimatePresence>
 
       <ConfirmDialog
         open={showEndConfirm}

@@ -181,6 +181,12 @@ export async function startDouzeCoupsTv(
     faceAFacePresenterToken: null,
     presenterDesignationMode: input.presenterDesignationMode ?? "random",
     finalRanking: null,
+    lastAnswerKey: null,
+    cpcFoundIndices: [],
+    duelMemory: null,
+    pausedReason: null,
+    pausedPlayerToken: null,
+    pausedPlayerPseudo: null,
   };
 
   // Vague T (#1) — On reset state_version à 0 au démarrage. Les saves

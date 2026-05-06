@@ -3,6 +3,7 @@ import {
   botWillAnswerCorrectly,
   isBotToken,
   pickBotAnswerIdx,
+  pickBotCpcNextIdx,
   pickBotDelayMs,
   pickBotDuelCandidate,
   pickBotDuelTheme,
@@ -132,5 +133,34 @@ describe("pickBotDelayMs", () => {
   it("gère minMs > maxMs (clamp)", () => {
     // max devient égal à min
     expect(pickBotDelayMs(() => 0.5, 3000, 1200)).toBe(3000);
+  });
+});
+
+// Vague V (#5) — Bot CPC continu : choisit clic par clic
+describe("pickBotCpcNextIdx", () => {
+  it("skill=100 + foundIndices vide → choisit une bonne (jamais l'intrus)", () => {
+    const idx = pickBotCpcNextIdx(7, 4, [], 100, () => 0.5);
+    expect(idx).not.toBe(4); // pas l'intrus
+    expect(idx).toBeGreaterThanOrEqual(0);
+  });
+
+  it("skill=0 → choisit l'intrus", () => {
+    const idx = pickBotCpcNextIdx(7, 4, [], 0, () => 0.5);
+    expect(idx).toBe(4);
+  });
+
+  it("retourne null si toutes les bonnes sont trouvées", () => {
+    // 7 props, intrus idx 4, donc bonnes = [0,1,2,3,5,6]. Si toutes trouvées → null
+    const idx = pickBotCpcNextIdx(7, 4, [0, 1, 2, 3, 5, 6], 100, () => 0.5);
+    expect(idx).toBeNull();
+  });
+
+  it("ne retourne jamais un idx déjà trouvé (skill=100)", () => {
+    const found = [0, 1, 2];
+    for (let i = 0; i < 20; i++) {
+      const idx = pickBotCpcNextIdx(7, 4, found, 100, () => i / 20);
+      expect(found.includes(idx!)).toBe(false);
+      expect(idx).not.toBe(4); // jamais l'intrus avec skill=100
+    }
   });
 });

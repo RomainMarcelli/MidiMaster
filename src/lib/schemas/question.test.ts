@@ -258,6 +258,32 @@ describe("questionSchema — format (Coup d'Envoi)", () => {
     expect(questionSchema.safeParse(input).success).toBe(true);
   });
 
+  it("accepte format 'choix_2' avec n'importe quelles réponses (générique)", () => {
+    const input = baseInput({
+      type: "quizz_2",
+      format: "choix_2",
+      reponses: [
+        { text: "Mer Méditerranée", correct: true },
+        { text: "Mer Baltique", correct: false },
+      ],
+    });
+    expect(questionSchema.safeParse(input).success).toBe(true);
+  });
+
+  it("rejette format 'choix_2' sur un type autre que quizz_2", () => {
+    const input = baseInput({
+      type: "quizz_4",
+      format: "choix_2",
+      reponses: [
+        { text: "A", correct: true },
+        { text: "B", correct: false },
+        { text: "C", correct: false },
+        { text: "D", correct: false },
+      ],
+    });
+    expect(questionSchema.safeParse(input).success).toBe(false);
+  });
+
   it("rejette format défini sur un type autre que quizz_2", () => {
     const input = baseInput({
       type: "quizz_4",

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bot, Crown, Loader2, MinusCircle, Play, Smartphone, Tv, Users, X } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Bot, Crown, Expand, Loader2, MinusCircle, Play, Smartphone, Tv, Users, X } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
@@ -12,7 +13,6 @@ import { endTvRoom } from "@/lib/realtime/room-actions";
 import { joinTvChannel } from "@/lib/realtime/tv-channel";
 import { startDouzeCoupsTv } from "@/lib/realtime/tv-douze-coups-actions";
 import { type TvDouzeCoupsState } from "@/lib/realtime/tv-douze-coups-state";
-import { WaitingCarousel } from "./waiting-carousel";
 import { TvDouzeCoupsHost } from "./tv-douze-coups-host";
 import { ShareLinkButtons } from "@/components/tv/ShareLinkButtons";
 import { addBotToRoom, removeBotFromRoom } from "@/lib/realtime/bot-actions";
@@ -36,8 +36,6 @@ interface TvHostRoomProps {
   code: string;
   initialPlayers: PlayerRow[];
   initialStatus: "waiting" | "playing" | "paused" | "ended";
-  /** P3.1 — Quiz preview pour le carrousel d'attente (lobby). */
-  quizPreview?: { enonce: string; format: string | null } | null;
   /** P4.1 — Mode de la room ("scan" ou "remote"). */
   roomModeKind?: "scan" | "remote";
 }
@@ -56,7 +54,6 @@ export function TvHostRoom({
   code,
   initialPlayers,
   initialStatus,
-  quizPreview = null,
   roomModeKind = "scan",
 }: TvHostRoomProps) {
   const router = useRouter();
@@ -66,6 +63,9 @@ export function TvHostRoom({
   // H4.3 — État du modal "Mettre fin à la partie".
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [ending, setEnding] = useState(false);
+  // Vague W (#7) — État du modal fullscreen pour le QR code (clic depuis
+  // le lobby ouvre le QR en grand pour faciliter le scan).
+  const [qrFullscreen, setQrFullscreen] = useState(false);
 
   // Calculé côté client uniquement (origin n'est pas dispo en SSR).
   useEffect(() => {
@@ -239,8 +239,12 @@ export function TvHostRoom({
       alert(res.message);
       return;
     }
-    // Le DELETE postgres_changes va automatiquement retirer la ligne
-    // côté client.
+    // Optimistic update : on retire localement tout de suite. Le
+    // DELETE postgres_changes serait redondant (filter `room_id=eq…`
+    // ne match pas `payload.old` quand la table a REPLICA IDENTITY
+    // DEFAULT — on ne reçoit pas l'event). Le filter idempotent
+    // ci-dessous reste correct si l'event arrivait quand même.
+    setPlayers((prev) => prev.filter((p) => p.token !== botToken));
   }
 
   /** Vague R — Lance le mode "12 Coups" avec tous les joueurs en ligne. */
@@ -363,17 +367,29 @@ export function TvHostRoom({
           <p className="text-[10px] font-bold uppercase tracking-widest text-gold-warm">
             Pour rejoindre
           </p>
+          {/* Vague W (#7) — QR cliquable → ouverture en plein écran. La
+              taille augmente aussi de 180→220 pour mieux remplir la
+              colonne et faciliter le scan à distance. */}
           {joinUrl ? (
-            <div className="rounded-xl bg-card p-3 shadow-[0_8px_32px_rgba(245,183,0,0.35)]">
+            <button
+              type="button"
+              onClick={() => setQrFullscreen(true)}
+              aria-label="Agrandir le QR code"
+              className="group relative rounded-xl bg-card p-3 shadow-[0_8px_32px_rgba(245,183,0,0.35)] transition-transform hover:scale-105"
+            >
               <QRCodeSVG
                 value={joinUrl}
-                size={180}
+                size={220}
                 level="M"
                 includeMargin={false}
               />
-            </div>
+              <span className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-foreground/70 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-background opacity-0 transition-opacity group-hover:opacity-100">
+                <Expand className="h-3 w-3" aria-hidden="true" />
+                Agrandir
+              </span>
+            </button>
           ) : (
-            <div className="flex h-[180px] w-[180px] items-center justify-center rounded-xl bg-card">
+            <div className="flex h-[220px] w-[220px] items-center justify-center rounded-xl bg-card">
               <Loader2 className="h-8 w-8 animate-spin text-gold-warm" aria-hidden="true" />
             </div>
           )}
@@ -541,16 +557,9 @@ export function TvHostRoom({
         </section>
       </div>
 
-      {/* Carrousel en bandeau bas (très compact) — n'affiche qu'en lobby. */}
-      {status === "waiting" && (
-        <div className="shrink-0">
-          <WaitingCarousel
-            seed={code}
-            quizPreview={quizPreview}
-            intervalMs={7000}
-          />
-        </div>
-      )}
+      {/* Vague V (#8) — Carrousel TV retiré. Le lobby reste minimaliste
+          (QR + code + joueurs + boutons). Les téléphones afficheront un
+          quiz d'entraînement en attendant (Vague W). */}
       {/* H4.3 — Modal "Mettre fin à la partie" en remplacement du
           window.confirm natif. */}
       <ConfirmDialog
@@ -563,6 +572,50 @@ export function TvHostRoom({
         confirmLabel={ending ? "Fermeture…" : "Mettre fin"}
         confirmVariant="danger"
       />
+
+      {/* Vague W (#7) — Modal QR fullscreen pour faciliter le scan à
+          distance. Click sur le QR dans le lobby ouvre cet overlay. */}
+      <AnimatePresence>
+        {qrFullscreen && joinUrl && (
+          <motion.div
+            key="qr-fullscreen"
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 p-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="QR code en plein écran"
+            onClick={() => setQrFullscreen(false)}
+          >
+            <motion.div
+              className="flex flex-col items-center gap-6 rounded-3xl bg-cream p-10 shadow-2xl"
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-xs font-bold uppercase tracking-widest text-gold-warm">
+                Scanne pour rejoindre
+              </p>
+              <div className="rounded-2xl bg-card p-4">
+                <QRCodeSVG value={joinUrl} size={500} level="M" includeMargin={false} />
+              </div>
+              <p className="font-display text-6xl font-black tracking-[0.25em] text-foreground">
+                {code}
+              </p>
+              <Button
+                onClick={() => setQrFullscreen(false)}
+                variant="outline"
+                className="min-w-[160px]"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+                Fermer
+              </Button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }

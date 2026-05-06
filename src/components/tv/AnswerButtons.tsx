@@ -7,14 +7,18 @@ import { cn } from "@/lib/utils";
 /**
  * Boutons de réponse A/B/C/D pour le téléphone joueur en mode TV.
  *
- * Vague S5 — refonte "jeu mobile premium" :
- *  - dégradé navy avec bordure gold + halo
- *  - lettre A/B/C/D dans une box ronde dorée à gauche
- *  - texte cream gros et lisible
+ * Vague W (#5) — refonte "Quizz Cards" cream/navy :
+ *  - fond cream (lisible, pas agressif)
+ *  - bordure navy (DA principale)
+ *  - lettre A/B/C/D dans une box carrée arrondie navy à gauche
+ *  - texte navy à droite, layout horizontal compact
  *  - hover lift + tap squeeze
  *  - apparition staggerée (effet "wow" au chargement)
  *  - 4 états : idle / selected / correct / incorrect
  *  - shake horizontal sur mauvaise réponse
+ *
+ * Avant Vague W : dégradé navy avec halo gold (Vague S5). On bascule sur
+ * le style cream/navy plus DA-cohérent avec le reste de l'app.
  */
 
 export type AnswerState = "idle" | "selected" | "correct" | "incorrect";
@@ -70,59 +74,53 @@ export function AnswerButtons({
               scale: { duration: 0.3, delay: 0.06 * i },
               x: { duration: 0.45 },
             }}
-            whileHover={enabled ? { scale: 1.03, y: -2 } : undefined}
-            whileTap={enabled ? { scale: 0.96 } : undefined}
+            whileHover={enabled ? { scale: 1.02, y: -1 } : undefined}
+            whileTap={enabled ? { scale: 0.97 } : undefined}
             disabled={!enabled}
             aria-label={`Réponse ${String.fromCharCode(65 + c.idx)}${
               showText ? ` : ${c.text}` : ""
             }`}
             className={cn(
-              "relative flex w-full flex-col items-center justify-center gap-3 overflow-hidden rounded-3xl border-2 p-5 sm:p-6 transition-all",
-              "min-h-[140px]",
+              // Vague W (#5) — Layout horizontal Quizz Card : box lettre à
+              // gauche, texte à droite. col-span-full sur 2 réponses pour
+              // pleine largeur (style flashcard).
+              "relative flex w-full items-center gap-4 overflow-hidden rounded-2xl border-2 p-4 sm:p-5 transition-all",
+              "min-h-[88px]",
+              choices.length <= 2 && "col-span-2",
               stateClasses(state),
-              !enabled && state === "idle" && "opacity-50",
+              !enabled && state === "idle" && "opacity-60",
             )}
           >
-            {/* Halo doré pulsant en idle (pour appeler le clic) */}
-            {state === "idle" && enabled && (
-              <motion.div
-                className="pointer-events-none absolute inset-0 rounded-3xl"
-                style={{ boxShadow: "inset 0 0 32px rgba(245,183,0,0.15)" }}
-                animate={{ opacity: [0.4, 0.85, 0.4] }}
-                transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-                aria-hidden="true"
-              />
-            )}
+            <span
+              className={cn(
+                "flex h-14 w-14 shrink-0 items-center justify-center rounded-xl font-display text-3xl font-black shadow-md sm:h-16 sm:w-16 sm:text-4xl",
+                letterBgFor(state),
+              )}
+            >
+              {String.fromCharCode(65 + c.idx)}
+            </span>
 
-            <div className="relative z-10 flex w-full items-center justify-between gap-3">
+            {showText ? (
               <span
                 className={cn(
-                  "flex h-14 w-14 shrink-0 items-center justify-center rounded-full font-display text-3xl font-black shadow-md sm:h-16 sm:w-16 sm:text-4xl",
-                  letterBgFor(state),
-                )}
-              >
-                {String.fromCharCode(65 + c.idx)}
-              </span>
-              {state === "correct" && (
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-life-green text-cream shadow-lg">
-                  <Check className="h-6 w-6" aria-hidden="true" strokeWidth={3} />
-                </span>
-              )}
-              {state === "incorrect" && (
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-buzz text-cream shadow-lg">
-                  <X className="h-6 w-6" aria-hidden="true" strokeWidth={3} />
-                </span>
-              )}
-            </div>
-
-            {showText && (
-              <span
-                className={cn(
-                  "relative z-10 w-full text-center text-base font-bold leading-tight sm:text-lg",
+                  "flex-1 text-left text-base font-bold leading-snug sm:text-lg",
                   textColorFor(state),
                 )}
               >
                 {c.text}
+              </span>
+            ) : (
+              <span className="flex-1" />
+            )}
+
+            {state === "correct" && (
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-life-green text-cream shadow">
+                <Check className="h-5 w-5" aria-hidden="true" strokeWidth={3} />
+              </span>
+            )}
+            {state === "incorrect" && (
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-buzz text-cream shadow">
+                <X className="h-5 w-5" aria-hidden="true" strokeWidth={3} />
               </span>
             )}
           </motion.button>
@@ -147,23 +145,23 @@ function computeState(
 }
 
 /**
- * Classe Tailwind pour l'état du bouton. Style premium :
- *  - idle    : dégradé navy + bordure gold + ombre profonde
- *  - selected: dégradé gold + bordure gold épaisse
- *  - correct : dégradé life-green + bordure life-green
- *  - incorrect: dégradé buzz + bordure buzz
+ * Vague W (#5) — Quizz Cards style cream/navy :
+ *  - idle    : cream + bordure navy/30 + box lettre navy
+ *  - selected: cream + bordure gold + box lettre gold
+ *  - correct : life-green pâle + bordure life-green + box life-green
+ *  - incorrect: buzz pâle + bordure buzz + box buzz
  */
 function stateClasses(state: AnswerState): string {
   switch (state) {
     case "correct":
-      return "border-life-green bg-gradient-to-br from-life-green/20 via-life-green/15 to-life-green/25 shadow-[0_8px_32px_rgba(58,164,86,0.4)]";
+      return "border-life-green bg-life-green/10 shadow-[0_4px_16px_rgba(58,164,86,0.25)]";
     case "incorrect":
-      return "border-buzz bg-gradient-to-br from-buzz/20 via-buzz/15 to-buzz/30 shadow-[0_8px_32px_rgba(206,31,67,0.4)]";
+      return "border-buzz bg-buzz/10 shadow-[0_4px_16px_rgba(206,31,67,0.25)]";
     case "selected":
-      return "border-gold bg-gradient-to-br from-gold/30 via-gold-pale to-gold/40 shadow-[0_8px_32px_rgba(245,183,0,0.5)]";
+      return "border-gold bg-gold/10 shadow-[0_4px_16px_rgba(245,183,0,0.3)]";
     case "idle":
     default:
-      return "border-gold bg-gradient-to-br from-navy via-navy-soft to-navy hover:from-navy-soft hover:via-navy-soft hover:to-navy shadow-[0_8px_28px_rgba(11,31,77,0.5)] hover:shadow-[0_12px_40px_rgba(245,183,0,0.4)]";
+      return "border-navy/25 bg-cream hover:border-navy/60 shadow-md hover:shadow-lg";
   }
 }
 
@@ -177,11 +175,11 @@ function letterBgFor(state: AnswerState): string {
       return "bg-gold text-navy";
     case "idle":
     default:
-      return "bg-gold text-navy";
+      return "bg-navy text-cream";
   }
 }
 
-/** Couleur du texte de la réponse selon l'état (lisibilité sur fond). */
+/** Couleur du texte de la réponse selon l'état (lisibilité sur fond cream). */
 function textColorFor(state: AnswerState): string {
   switch (state) {
     case "correct":
@@ -189,9 +187,8 @@ function textColorFor(state: AnswerState): string {
     case "incorrect":
       return "text-buzz";
     case "selected":
-      return "text-foreground";
     case "idle":
     default:
-      return "text-cream";
+      return "text-foreground";
   }
 }

@@ -1,0 +1,21 @@
+-- Migration 0022 — Force REPLICA IDENTITY FULL sur tv_room_players.
+--
+-- Pourquoi :
+--   Supabase Realtime applique les filtres `eq.{col}` côté serveur sur
+--   `payload.old` (events DELETE) et `payload.new` (INSERT/UPDATE).
+--   Avec le défaut `REPLICA IDENTITY DEFAULT`, Postgres ne place QUE
+--   la PK dans `payload.old` lors d'un DELETE → le filtre
+--   `room_id=eq.{...}` ne peut pas matcher car `room_id` n'est pas la
+--   PK → l'event est silencieusement ignoré et le client ne reçoit
+--   jamais la suppression.
+--
+--   Symptôme observé : enlever un bot du lobby TV ne mettait pas à
+--   jour la liste tant qu'on ne rechargeait pas la page (l'INSERT
+--   marchait car `payload.new` est toujours complet).
+--
+-- Effet : pour DELETE, Postgres écrit l'image complète de la ligne
+-- supprimée dans le WAL → Realtime peut filtrer correctement.
+--
+-- Coût : un peu plus de WAL à l'écriture, négligeable pour cette table.
+
+alter table public.tv_room_players replica identity full;

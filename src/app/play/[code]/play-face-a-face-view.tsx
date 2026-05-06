@@ -21,6 +21,11 @@ import type {
   FaVoteStartPayload,
   FaEndPayload,
 } from "@/lib/realtime/room-events";
+import {
+  PresenterRouletteAnimation,
+  type RouletteCandidate,
+} from "@/components/tv/PresenterRouletteAnimation";
+import { AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 interface PlayFaceAFaceViewProps {
@@ -55,6 +60,11 @@ export function PlayFaceAFaceView({ myToken, channel }: PlayFaceAFaceViewProps) 
   const [timers, setTimers] = useState<Record<string, number>>({});
   const [winnerToken, setWinnerToken] = useState<string | null>(null);
   const [voteCast, setVoteCast] = useState<string | null>(null);
+  // Vague W (#10) — Animation roulette présentateur 5s.
+  const [rouletteAnim, setRouletteAnim] = useState<{
+    winnerToken: string;
+    candidates: [RouletteCandidate, RouletteCandidate];
+  } | null>(null);
 
   useEffect(() => {
     channel.on("fa:vote-start", (payload: FaVoteStartPayload) => {
@@ -68,6 +78,17 @@ export function PlayFaceAFaceView({ myToken, channel }: PlayFaceAFaceViewProps) 
       setPresenterToken(payload.presenterToken);
       setChallengerToken(payload.challengerToken);
       setPhase("playing");
+    });
+    // Vague W (#10) — Animation roulette présentateur 5s avant playing.
+    channel.on("fa:presenter-roulette", (payload) => {
+      if (payload.candidates.length < 2) return;
+      const c0 = payload.candidates[0]!;
+      const c1 = payload.candidates[1]!;
+      setRouletteAnim({
+        winnerToken: payload.winnerToken,
+        candidates: [c0, c1],
+      });
+      window.setTimeout(() => setRouletteAnim(null), 5000);
     });
     channel.on("fa:question", (payload: FaQuestionPayload) => {
       setQuestion(payload);
@@ -89,6 +110,12 @@ export function PlayFaceAFaceView({ myToken, channel }: PlayFaceAFaceViewProps) 
   }
 
   function handleGo() {
+    // eslint-disable-next-line no-console
+    console.log("[W3:fa:go] click", {
+      presenterToken,
+      myToken,
+      isPresenter: presenterToken === myToken,
+    });
     if (presenterToken !== myToken) return;
     channel.send("fa:go", { presenterToken: myToken });
   }
@@ -101,6 +128,19 @@ export function PlayFaceAFaceView({ myToken, channel }: PlayFaceAFaceViewProps) 
       challengerToken,
       isCorrect,
     });
+  }
+
+  // Vague W (#10) — Animation roulette présentateur (priorité sur tout).
+  if (rouletteAnim) {
+    return (
+      <AnimatePresence>
+        <PresenterRouletteAnimation
+          key="presenter-roulette"
+          candidates={rouletteAnim.candidates}
+          winnerToken={rouletteAnim.winnerToken}
+        />
+      </AnimatePresence>
+    );
   }
 
   if (phase === "idle") {
@@ -244,34 +284,38 @@ export function PlayFaceAFaceView({ myToken, channel }: PlayFaceAFaceViewProps) 
             {challengerTimer}s
           </span>
         </div>
-        <div className="grid flex-1 grid-cols-1 gap-3">
+        {/* Vague W (#6) — Boutons compacts, palette sage/bordeaux atténuée
+            (cohérent DA cream/navy, moins agressif que life-green/buzz vifs). */}
+        <div className="flex flex-col gap-2">
           <motion.button
             type="button"
-            whileTap={{ scale: 0.97 }}
+            whileTap={{ scale: 0.98 }}
             onClick={handleGo}
-            className="flex flex-1 min-h-[80px] items-center justify-center gap-3 rounded-3xl bg-gold text-2xl font-extrabold uppercase text-on-color shadow-lg"
+            className="flex min-h-[56px] items-center justify-center gap-2 rounded-xl border-2 border-gold bg-gold/15 px-5 py-3 text-lg font-bold text-gold-warm shadow-sm hover:bg-gold/25"
           >
-            <Play className="h-6 w-6" aria-hidden="true" fill="currentColor" />
+            <Play className="h-5 w-5" aria-hidden="true" fill="currentColor" />
             GO — démarrer le timer
           </motion.button>
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.97 }}
-            onClick={() => handleValidate(true)}
-            className="flex flex-1 min-h-[80px] items-center justify-center gap-3 rounded-3xl bg-life-green text-2xl font-extrabold uppercase text-on-color shadow-lg"
-          >
-            <Check className="h-6 w-6" aria-hidden="true" />
-            Bonne réponse
-          </motion.button>
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.97 }}
-            onClick={() => handleValidate(false)}
-            className="flex flex-1 min-h-[80px] items-center justify-center gap-3 rounded-3xl bg-buzz text-2xl font-extrabold uppercase text-white shadow-lg"
-          >
-            <X className="h-6 w-6" aria-hidden="true" />
-            Mauvaise réponse
-          </motion.button>
+          <div className="grid grid-cols-2 gap-2">
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.98 }}
+              onClick={() => handleValidate(true)}
+              className="flex min-h-[52px] items-center justify-center gap-2 rounded-xl border-2 border-sage bg-sage/10 px-4 py-2 text-base font-semibold text-sage hover:bg-sage/20"
+            >
+              <Check className="h-5 w-5" aria-hidden="true" />
+              Bonne
+            </motion.button>
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.98 }}
+              onClick={() => handleValidate(false)}
+              className="flex min-h-[52px] items-center justify-center gap-2 rounded-xl border-2 border-bordeaux bg-bordeaux/10 px-4 py-2 text-base font-semibold text-bordeaux hover:bg-bordeaux/20"
+            >
+              <X className="h-5 w-5" aria-hidden="true" />
+              Mauvaise
+            </motion.button>
+          </div>
         </div>
       </main>
     );

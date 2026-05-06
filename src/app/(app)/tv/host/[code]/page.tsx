@@ -39,19 +39,9 @@ export default async function TvHostRoomPage({
     .eq("room_id", room.id)
     .order("joined_at", { ascending: true });
 
-  // P3.1 — Quiz preview pour le carrousel d'attente. Une seule question
-  // random pour donner un avant-goût (sans exposer la bonne réponse, on
-  // ne récupère que l'énoncé + format).
-  const { data: quizPreview } = await supabase
-    .from("questions")
-    .select("enonce, format")
-    .eq("type", "quizz_2")
-    .limit(20)
-    .then(({ data }) => {
-      if (!data || data.length === 0) return { data: null };
-      const pick = data[Math.floor(Math.random() * data.length)];
-      return { data: pick };
-    });
+  // Vague V (#8) — Le quizPreview du carrousel TV n'est plus utilisé
+  // (carrousel retiré du lobby). Si on veut un quiz d'attente, ce sera
+  // côté téléphone uniquement (Vague W).
 
   return (
     <TvHostRoom
@@ -73,14 +63,6 @@ export default async function TvHostRoomPage({
         botSkill: p.bot_skill,
       }))}
       initialStatus={room.status as "waiting" | "playing" | "paused" | "ended"}
-      quizPreview={
-        quizPreview
-          ? {
-              enonce: quizPreview.enonce as string,
-              format: (quizPreview.format as string | null) ?? null,
-            }
-          : null
-      }
       roomModeKind={(room.mode as "scan" | "remote" | null) ?? "scan"}
     />
   );

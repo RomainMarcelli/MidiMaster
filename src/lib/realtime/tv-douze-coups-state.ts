@@ -148,6 +148,46 @@ export interface TvDouzeCoupsState {
   presenterDesignationMode: "random" | "vote";
   /** Classement final (rempli en phase "podium"). */
   finalRanking: FinalRanking[] | null;
+  /**
+   * Vague V (#1) — Cle d'idempotence sur la derniere reponse acceptee.
+   * Permet de rejeter les events `*:answer-submit` doublonnes (React strict
+   * mode qui re-attache les handlers Realtime, timer de bot relance, etc.)
+   * sans avoir a cleanup ces side effects. Forme: `{questionId}:{playerToken}:{chosenIdx}`.
+   * Reset implicite : devient stale quand la question courante change (id different).
+   */
+  lastAnswerKey?: string | null;
+  /**
+   * Vague V (#5) — Mecanique CPC en continu : tableau des idx deja
+   * trouves (propositions liees) sur la question courante. Le joueur
+   * courant continue a cliquer tant qu'il ne tombe pas sur l'intrus
+   * OU qu'il n'a pas trouve les 6 bonnes (serie complete). Reset a
+   * chaque advanceTurn (nouvelle question = nouveau departement).
+   */
+  cpcFoundIndices?: number[];
+  /**
+   * Vague V (#4) — Memoire des themes proposes au duel n°1 (en CE).
+   * Reutilises au duel n°2 (en CPC) avec le theme deja choisi grise.
+   * Si null, c'est qu'aucun duel n'a encore eu lieu (ou que la partie
+   * vient d'etre cree en pre-V).
+   */
+  duelMemory?: {
+    /** Les 2 themes tires au duel n°1. */
+    proposedThemes: DuelTheme[];
+    /** Id du theme choisi au duel n°1 (grise au duel n°2). */
+    chosenInDuel1: number;
+  } | null;
+  /**
+   * Vague V (#7) — Pause causee par l'abandon d'un joueur (Presence leave
+   * > 30s detectee cote host). Quand non null, l'orchestrateur ignore les
+   * events `*:answer-submit` entrants et les telephones affichent un
+   * overlay "Partie en pause". Reset par les server actions
+   * `eliminatePlayerForLeaving` / `replaceLeftPlayerWithBot`.
+   */
+  pausedReason?: "player-left" | null;
+  /** Token du joueur ayant declenche la pause. */
+  pausedPlayerToken?: string | null;
+  /** Pseudo du joueur ayant declenche la pause (cache pour l'UI modal). */
+  pausedPlayerPseudo?: string | null;
 }
 
 // ============================================================================

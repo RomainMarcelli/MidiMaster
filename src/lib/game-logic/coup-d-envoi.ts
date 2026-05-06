@@ -51,7 +51,10 @@ export function prepareCeQuestion(
     : [];
 
   const format: QuestionFormat | null =
-    q.format === "vrai_faux" || q.format === "ou" || q.format === "plus_moins"
+    q.format === "vrai_faux" ||
+    q.format === "ou" ||
+    q.format === "plus_moins" ||
+    q.format === "choix_2"
       ? q.format
       : null;
 
@@ -129,6 +132,8 @@ export function formatLabel(format: QuestionFormat | null): string {
       return "L'un ou l'autre ?";
     case "plus_moins":
       return "Plus ou moins ?";
+    case "choix_2":
+      return "";
     default:
       return "";
   }

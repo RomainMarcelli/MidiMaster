@@ -144,6 +144,20 @@ export interface RoomEvents {
   "fa:vote-start": FaVoteStartPayload;
   "fa:vote-cast": FaVoteCastPayload;
   "fa:vote-result": FaVoteResultPayload;
+  /**
+   * Vague W (#10) — Animation suspens "qui sera présentateur" en effet
+   * roulette. Broadcast par l'hôte juste après le tally du vote, AVANT
+   * `fa:vote-result`. Tous les écrans (TV + téléphones) affichent
+   * l'animation 5s puis basculent sur la vue playing via `fa:vote-result`.
+   */
+  "fa:presenter-roulette": {
+    winnerToken: string;
+    candidates: Array<{
+      token: string;
+      pseudo: string;
+      avatarUrl: string | null;
+    }>;
+  };
   "fa:question": FaQuestionPayload;
   "fa:tick": FaTickPayload;
   /** Le présentateur clique "GO" pour démarrer le timer du challenger. */
@@ -177,6 +191,32 @@ export interface RoomEvents {
     isCorrect: boolean;
     explication?: string | null;
   };
+  /**
+   * Vague V (#3) — Animation 1/2 d'introduction du duel : "[Pseudo] passe
+   * au ROUGE !" plein écran 3s. Broadcast par l'hôte juste avant le
+   * `ce:duel-announce` puis le `ce:duel-start`.
+   */
+  "ce:player-turns-red": {
+    token: string;
+    pseudo: string;
+    avatarUrl: string | null;
+  };
+  /**
+   * Vague W (#9) — Animation "passage au orange" plein écran 3s, déclenchée
+   * quand un joueur passe de vert à orange (1ère erreur). Pas de duel à ce
+   * stade — juste un warning visuel pour signaler "plus qu'une chance".
+   */
+  "ce:player-turns-orange": {
+    token: string;
+    pseudo: string;
+    avatarUrl: string | null;
+  };
+  /**
+   * Vague V (#3) — Animation 2/2 d'introduction du duel : "Qui dit rouge
+   * dit DUEL" plein écran 3s. Broadcast 3s après `ce:player-turns-red`
+   * et 3s avant `ce:duel-start`.
+   */
+  "ce:duel-announce": Record<string, never>;
   /** Un joueur tombe au rouge — démarrage du duel. */
   "ce:duel-start": {
     challengerToken: string;
@@ -192,6 +232,12 @@ export interface RoomEvents {
   "ce:duel-theme-proposals": {
     candidateToken: string;
     themes: Array<{ id: number; slug: string; nom: string }>;
+    /**
+     * Vague V (#4) — Si non null, c'est le 2e duel (en CPC) et ce thème
+     * a déjà été utilisé au 1er duel : il est grisé / désactivé côté
+     * téléphone. Le candidat est forcé de prendre l'autre.
+     */
+    disabledThemeId?: number | null;
   };
   /** Le candidat a choisi son thème. */
   "ce:duel-theme-chosen": {
@@ -256,6 +302,30 @@ export interface RoomEvents {
     isCorrect: boolean;
     explication?: string | null;
   };
+  /**
+   * Vague V (#5) — Progression CPC en continu : broadcast après chaque
+   * clic correct (proposition liée). Les téléphones marquent les idx
+   * en vert au fur et à mesure. Le tour ne change pas tant que le
+   * joueur ne tombe pas sur l'intrus OU qu'il n'a pas tout trouvé.
+   */
+  "cpc:answer-progress": {
+    questionId: string;
+    byToken: string;
+    /** Indices des propositions liées déjà trouvées (cumulatif). */
+    foundIndices: number[];
+    /** Dernier idx cliqué (pour animation flash sur cette prop). */
+    lastChosenIdx: number;
+  };
+  /**
+   * Vague V (#5) — Le joueur a trouvé les 6 bonnes propositions sans
+   * tomber sur l'intrus. Animation "série complète" 3s puis nouvelle
+   * question CPC pour le joueur suivant. Personne ne perd de vie.
+   */
+  "cpc:series-complete": {
+    questionId: string;
+    byToken: string;
+    pseudo: string;
+  };
   // -- Phase / Podium / Restart (R3)
   /** Changement de phase global du mode 12 Coups TV. */
   "dc:phase-change": {
@@ -263,6 +333,21 @@ export interface RoomEvents {
   };
   /** L'hôte a relancé une partie depuis le podium → reset au lobby. */
   "room:restart": Record<string, never>;
+  /**
+   * Vague V (#7) — Partie mise en pause par l'hôte suite à l'abandon
+   * d'un joueur (Presence leave > 30s). Tous les téléphones figent leur
+   * vue sur un overlay "Partie en pause" jusqu'à `game:resumed`.
+   */
+  "game:paused": {
+    reason: "player-left";
+    pseudo: string;
+  };
+  /**
+   * Vague V (#7) — Reprise de la partie après décision de l'hôte
+   * (continuer, remplacer par bot). Si l'option "attendre" a été choisie,
+   * cet event n'est broadcast que quand le joueur revient.
+   */
+  "game:resumed": Record<string, never>;
 }
 
 export type RoomEventName = keyof RoomEvents;

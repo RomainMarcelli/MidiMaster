@@ -48,6 +48,11 @@
   --color-life-green: #2ecc71;
   --color-life-yellow: #f5b700;
   --color-life-red: #e63946;
+  /* Vague W (#6) — palette atténuée pour le face-à-face (validation
+     présentateur). Vert sage / rouge bordeaux : moins agressif que les
+     life-green/buzz vifs, cohérent avec la DA cream/navy. */
+  --color-sage: #7b9171;
+  --color-bordeaux: #a0454f;
 
   /* Compat : anciens alias utilisés dans les composants de la Phase 2 */
   --color-midnight: var(--color-navy);

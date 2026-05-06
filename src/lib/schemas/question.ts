@@ -26,6 +26,7 @@ export const QUESTION_FORMATS = [
   "vrai_faux",
   "ou",
   "plus_moins",
+  "choix_2",
 ] as const;
 
 export type QuestionFormat = (typeof QUESTION_FORMATS)[number];

@@ -93,3 +93,35 @@ export function pickBotDelayMs(
   const max = Math.max(min, maxMs);
   return Math.round(min + rng() * (max - min));
 }
+
+/**
+ * Vague V (#5) — Choisit le prochain clic du bot en CPC continu.
+ *
+ * Sémantique : à chaque clic, avec proba `(1 - skill/100)` le bot tombe sur
+ * l'intrus (mauvaise réponse → vie -1). Sinon, il clique une bonne pas
+ * encore trouvée. La boucle est gérée par l'orchestrateur côté host : à
+ * chaque "correct-continue", il rappelle cette fonction pour le clic suivant.
+ *
+ * Retourne `null` si toutes les bonnes ont été trouvées (le caller arrête
+ * la boucle ; la state machine retournera "series-complete").
+ */
+export function pickBotCpcNextIdx(
+  totalPropositions: number,
+  intrusIdx: number,
+  foundIndices: number[],
+  skill: number,
+  rng: () => number = Math.random,
+): number | null {
+  // Liste des idx encore disponibles (pas l'intrus, pas déjà trouvé).
+  const availableCorrects: number[] = [];
+  for (let i = 0; i < totalPropositions; i++) {
+    if (i !== intrusIdx && !foundIndices.includes(i)) {
+      availableCorrects.push(i);
+    }
+  }
+  if (availableCorrects.length === 0) return null; // tout trouvé
+  // Avec proba (1-skill/100) → cliquer l'intrus (mauvaise)
+  if (!botWillAnswerCorrectly(skill, rng)) return intrusIdx;
+  // Sinon : random parmi les bonnes restantes
+  return availableCorrects[Math.floor(rng() * availableCorrects.length)]!;
+}

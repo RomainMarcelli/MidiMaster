@@ -23,6 +23,13 @@ import {
   faVoteCastSchema,
   safeParseEvent,
 } from "@/lib/realtime/room-events-schemas";
+import {
+  PresenterRouletteAnimation,
+  type RouletteCandidate,
+} from "@/components/tv/PresenterRouletteAnimation";
+
+// Vague W (#10) — Durée de l'animation roulette présentateur (avant playing).
+const ROULETTE_ANIM_MS = 5000;
 
 interface TvFaceAFaceViewProps {
   code: string;
@@ -62,6 +69,12 @@ export function TvFaceAFaceView({
   const [state, setState] = useState<FaceAFaceState>(initialState);
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Vague W (#10) — Animation roulette présentateur (5s) entre la fin du
+  // vote et le début du face-à-face. Set par `handleStartDuel`.
+  const [rouletteAnim, setRouletteAnim] = useState<{
+    winnerToken: string;
+    candidates: [RouletteCandidate, RouletteCandidate];
+  } | null>(null);
   // Vague T (#1) — Version pour optimistic locking. On consomme et on
   // bumpe à chaque save (cf. helper `persistFa`).
   const versionRef = useRef(initialVersion);
@@ -115,8 +128,17 @@ export function TvFaceAFaceView({
 
     ch.on("fa:go", (raw) => {
       const payload = safeParseEvent("fa:go", faGoSchema, raw);
+      // eslint-disable-next-line no-console
+      console.log("[W3:fa:go] received", { payload, raw });
       if (!payload) return;
       setState((prev) => {
+        // eslint-disable-next-line no-console
+        console.log("[W3:fa:go] setState updater", {
+          phase: prev.phase,
+          presenterToken: prev.presenterToken,
+          payloadPresenter: payload.presenterToken,
+          alreadyTicking: prev.ticking,
+        });
         if (prev.phase !== "playing") return prev;
         if (payload.presenterToken !== prev.presenterToken) return prev;
         return { ...prev, ticking: true };
@@ -153,44 +175,52 @@ export function TvFaceAFaceView({
   }, [code]);
 
   // Tick du timer côté hôte (TV est l'arbitre du temps)
+  //
+  // IMPORTANT (Vague V suite) : on lit `stateRef.current` puis on `setState(next)`
+  // SANS updater, et on déclenche `persistFa` HORS de tout updater. Mettre une
+  // server action (saveFaceAFaceState) dans le updater de setState provoque
+  // "Cannot update a component (Router) while rendering a different component"
+  // car les server actions Next.js peuvent invalider le router pendant le
+  // recalcul du state. Même pattern que `updateAndSave` dans tv-douze-coups-host.
   useEffect(() => {
     if (state.phase !== "playing" || !state.ticking || !state.currentChallengerToken) {
       return;
     }
     const id = window.setInterval(() => {
-      setState((prev) => {
-        if (
-          prev.phase !== "playing" ||
-          !prev.ticking ||
-          !prev.currentChallengerToken
-        ) {
-          return prev;
-        }
-        const tk = prev.currentChallengerToken;
-        const remaining = Math.max(0, (prev.timers[tk] ?? 0) - 1);
-        const newTimers = { ...prev.timers, [tk]: remaining };
-        // Broadcast tick
-        channelRef.current?.send("fa:tick", { token: tk, remaining });
-        if (remaining <= 0) {
-          // Timeout = élimination
-          const winner =
-            prev.finalists.find((t) => t !== tk) ?? prev.finalists[0];
-          const next: FaceAFaceState = {
-            ...prev,
-            timers: newTimers,
-            phase: "ended",
-            ticking: false,
-            winnerToken: winner,
-          };
-          channelRef.current?.send("fa:end", {
-            winnerToken: winner,
-            loserToken: tk,
-          });
-          persistFa(next, "ended");
-          return next;
-        }
-        return { ...prev, timers: newTimers };
-      });
+      const prev = stateRef.current;
+      if (
+        prev.phase !== "playing" ||
+        !prev.ticking ||
+        !prev.currentChallengerToken
+      ) {
+        return;
+      }
+      const tk = prev.currentChallengerToken;
+      const remaining = Math.max(0, (prev.timers[tk] ?? 0) - 1);
+      const newTimers = { ...prev.timers, [tk]: remaining };
+      channelRef.current?.send("fa:tick", { token: tk, remaining });
+      if (remaining <= 0) {
+        const winner =
+          prev.finalists.find((t) => t !== tk) ?? prev.finalists[0];
+        const next: FaceAFaceState = {
+          ...prev,
+          timers: newTimers,
+          phase: "ended",
+          ticking: false,
+          winnerToken: winner,
+        };
+        stateRef.current = next;
+        setState(next);
+        channelRef.current?.send("fa:end", {
+          winnerToken: winner,
+          loserToken: tk,
+        });
+        persistFa(next, "ended");
+        return;
+      }
+      const next = { ...prev, timers: newTimers };
+      stateRef.current = next;
+      setState(next);
     }, 1000);
     return () => window.clearInterval(id);
   }, [state.phase, state.ticking, state.currentChallengerToken, roomId]);
@@ -200,11 +230,41 @@ export function TvFaceAFaceView({
    * Appelé depuis le bouton "Lancer le duel" (l'hôte est maître du tempo).
    */
   function handleStartDuel() {
-    setState((prev) => {
-      if (prev.phase !== "vote") return prev;
-      const presenter = tallyVote(prev.votes, prev.finalists);
-      const challenger =
-        prev.finalists.find((t) => t !== presenter) ?? prev.finalists[0];
+    // Cf. note dans le tick interval ci-dessus : `persistFa` (server action)
+    // ne doit JAMAIS être dans un updater de setState.
+    const prev = stateRef.current;
+    if (prev.phase !== "vote") return;
+    const presenter = tallyVote(prev.votes, prev.finalists);
+    const challenger =
+      prev.finalists.find((t) => t !== presenter) ?? prev.finalists[0];
+
+    // Vague W (#10) — Animation roulette 5s avant le vrai début.
+    // Broadcast `fa:presenter-roulette` à tous (TV + téléphones), puis
+    // setTimeout pour le `fa:vote-result` réel (qui bascule en playing).
+    const a = prev.finalists[0];
+    const b = prev.finalists[1];
+    const pa = players.find((x) => x.token === a);
+    const pb = players.find((x) => x.token === b);
+    const candidates: [RouletteCandidate, RouletteCandidate] = [
+      {
+        token: a,
+        pseudo: pa?.pseudo ?? prev.finalistPseudos[a] ?? "?",
+        avatarUrl: pa?.avatarUrl ?? null,
+      },
+      {
+        token: b,
+        pseudo: pb?.pseudo ?? prev.finalistPseudos[b] ?? "?",
+        avatarUrl: pb?.avatarUrl ?? null,
+      },
+    ];
+    setRouletteAnim({ winnerToken: presenter, candidates });
+    channelRef.current?.send("fa:presenter-roulette", {
+      winnerToken: presenter,
+      candidates,
+    });
+
+    window.setTimeout(() => {
+      setRouletteAnim(null);
       const next: FaceAFaceState = {
         ...prev,
         phase: "playing",
@@ -214,12 +274,13 @@ export function TvFaceAFaceView({
         ticking: false,
         currentQuestionIdx: 0,
       };
+      stateRef.current = next;
+      setState(next);
       channelRef.current?.send("fa:vote-result", {
         presenterToken: presenter,
         challengerToken: challenger,
       });
-      // Broadcast la 1re question (sans timer qui tourne — le présentateur
-      // doit cliquer "GO" pour démarrer)
+      // Broadcast la 1re question (sans timer — le présentateur doit GO)
       const q = prev.questions[0];
       if (q) {
         channelRef.current?.send("fa:question", {
@@ -230,8 +291,7 @@ export function TvFaceAFaceView({
         });
       }
       persistFa(next, "playing");
-      return next;
-    });
+    }, ROULETTE_ANIM_MS);
   }
 
   return (
@@ -268,6 +328,17 @@ export function TvFaceAFaceView({
       {state.phase === "ended" && (
         <EndedPanel state={state} players={players} onEnd={onEnd} />
       )}
+
+      {/* Vague W (#10) — Animation roulette présentateur (5s entre vote et playing). */}
+      <AnimatePresence>
+        {rouletteAnim && (
+          <PresenterRouletteAnimation
+            key="presenter-roulette"
+            candidates={rouletteAnim.candidates}
+            winnerToken={rouletteAnim.winnerToken}
+          />
+        )}
+      </AnimatePresence>
     </main>
   );
 }
@@ -393,13 +464,29 @@ function PlayingPanel({
             <span className="rounded-full bg-gold/20 px-3 py-1 text-xs font-bold uppercase tracking-widest text-gold-warm">
               {state.ticking ? "Manche en cours" : "Préparation…"}
             </span>
-            {q ? (
+            {/* Vague W (#11) — Cacher la question tant que le présentateur
+                n'a pas cliqué GO. Sinon les finalistes peuvent réfléchir
+                à l'avance en regardant la TV. */}
+            {q && state.ticking ? (
               <>
                 <h2 className="font-display text-3xl font-extrabold text-foreground lg:text-4xl">
                   {q.enonce}
                 </h2>
                 <p className="text-sm text-foreground/60">
                   {presenter?.pseudo ?? "Le présentateur"} lit la question.
+                </p>
+              </>
+            ) : q && !state.ticking ? (
+              <>
+                <Loader2
+                  className="h-10 w-10 animate-spin text-gold-warm"
+                  aria-hidden="true"
+                />
+                <p className="font-display text-2xl font-extrabold text-foreground">
+                  {presenter?.pseudo ?? "Le présentateur"} prépare la question…
+                </p>
+                <p className="text-sm text-foreground/60">
+                  En attente du clic GO pour démarrer.
                 </p>
               </>
             ) : (

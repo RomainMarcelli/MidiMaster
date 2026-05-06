@@ -33,7 +33,7 @@ export type QuestionType =
   | "coup_par_coup";
 
 /** Sous-format optionnel pour quizz_2 (Coup d'Envoi). */
-export type QuestionFormat = "vrai_faux" | "ou" | "plus_moins";
+export type QuestionFormat = "vrai_faux" | "ou" | "plus_moins" | "choix_2";
 
 export type UserRole = "user" | "admin";
 

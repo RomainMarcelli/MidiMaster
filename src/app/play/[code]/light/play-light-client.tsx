@@ -26,6 +26,7 @@ import {
 } from "../play-douze-coups-view";
 import { AnswerButtons } from "@/components/tv/AnswerButtons";
 import { RoomClosedOverlay } from "@/components/tv/RoomClosedOverlay";
+import { TrainingQuizz } from "../training-quizz";
 
 interface PlayLightClientProps {
   code: string;
@@ -490,12 +491,11 @@ function WaitingTurn({
 }) {
   const isMine = question?.currentPlayerToken === myToken;
   if (!question) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-foreground/60">
-        <Loader2 className="h-8 w-8 animate-spin" aria-hidden="true" />
-        <p>En attente de la première question…</p>
-      </div>
-    );
+    // Vague V (#2) — Plus de loader passif. On affiche un quiz d'entrainement
+    // infini pendant l'attente. La bascule vers la vraie partie se fait via
+    // les listeners `ce:question-show` / `cpc:question-show` / `ce:duel-start`
+    // qui flippent `dcMode = true` en amont (return early sur PlayDouzeCoupsView).
+    return <TrainingQuizz />;
   }
   if (isMine) return null;
   return (

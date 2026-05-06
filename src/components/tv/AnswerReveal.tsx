@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Check, Lightbulb, X } from "lucide-react";
+import { resolveCorrectAnswerLabel } from "@/lib/game-logic/answer-display";
 import { cn } from "@/lib/utils";
 
 /**
@@ -12,7 +13,10 @@ import { cn } from "@/lib/utils";
  *  - "La bonne réponse était : **X**" (en gros)
  *  - L'explication BDD si présente (avec icône ampoule)
  *
- * En cas de bonne réponse, on n'affiche qu'un bandeau de validation.
+ * Vague W (#8) — Si `correctText` est un label générique ("L'autre", "Vrai",
+ * "L'un"...), on l'enrichit via `resolveCorrectAnswerLabel` qui extrait un
+ * libellé informatif depuis l'explication. Sinon le téléphone affichait
+ * "La bonne réponse était : L'autre" — confusant.
  *
  * Composant purement présentationnel : pas de timer interne, c'est le
  * caller qui décide quand le démonter (généralement après ~3-4 s).
@@ -24,6 +28,7 @@ export function AnswerReveal({
   chosenText,
   explication,
   cpcMode = false,
+  byPseudo,
 }: {
   isCorrect: boolean;
   /** True si c'est l'utilisateur courant qui a répondu (sinon spectateur). */
@@ -36,8 +41,24 @@ export function AnswerReveal({
   explication?: string | null;
   /** True pour le format Coup par Coup (intrus). Adapte le wording. */
   cpcMode?: boolean;
+  /**
+   * Vague V (#6) — Pseudo du joueur qui a répondu (si !isMine). Utilisé
+   * pour personnaliser l'affichage côté spectateur : "[Pseudo] a bien
+   * répondu" plutôt que "Bonne réponse" générique.
+   */
+  byPseudo?: string;
 }) {
+  // Vague W (#8) — Enrichit `correctText` si c'est un label générique
+  // ("L'autre", "Vrai"...). Le helper extrait un libellé depuis l'explication.
+  const displayCorrect = resolveCorrectAnswerLabel(correctText, explication) ?? correctText;
+
   if (isCorrect) {
+    const titleMine = cpcMode ? "Bien joué — c'était l'intrus !" : "Bonne réponse !";
+    const titleOther = byPseudo
+      ? cpcMode
+        ? `${byPseudo} a trouvé l'intrus`
+        : `${byPseudo} a bien répondu`
+      : "Bonne réponse";
     return (
       <motion.div
         initial={{ opacity: 0, y: 8 }}
@@ -50,19 +71,26 @@ export function AnswerReveal({
         </span>
         <div className="flex-1">
           <p className="font-display text-base font-extrabold text-life-green">
-            {isMine
-              ? cpcMode
-                ? "Bien joué — c'était l'intrus !"
-                : "Bonne réponse !"
-              : "Bonne réponse"}
+            {isMine ? titleMine : titleOther}
           </p>
-          {explication && (
-            <ExplicationLine text={explication} tone="green" />
+          {!isMine && displayCorrect && (
+            <p className="mt-0.5 text-sm text-foreground/70">
+              {cpcMode ? "L'intrus" : "Réponse"} :{" "}
+              <span className="font-semibold text-foreground">{displayCorrect}</span>
+            </p>
           )}
+          {explication && <ExplicationLine text={explication} tone="green" />}
         </div>
       </motion.div>
     );
   }
+
+  const titleMine = cpcMode ? "Raté — ce n'était pas l'intrus" : "Mauvaise réponse";
+  const titleOther = byPseudo
+    ? cpcMode
+      ? `${byPseudo} s'est fait avoir par l'intrus`
+      : `${byPseudo} s'est trompé`
+    : "Loupé";
 
   return (
     <motion.div
@@ -77,11 +105,7 @@ export function AnswerReveal({
         </span>
         <div className="flex-1">
           <p className="font-display text-base font-extrabold text-buzz">
-            {isMine
-              ? cpcMode
-                ? "Raté — ce n'était pas l'intrus"
-                : "Mauvaise réponse"
-              : "Loupé"}
+            {isMine ? titleMine : titleOther}
           </p>
           {chosenText && isMine && (
             <p className="mt-0.5 text-sm text-foreground/70">
@@ -102,7 +126,7 @@ export function AnswerReveal({
             {cpcMode ? "L'intrus était" : "La bonne réponse était"}
           </p>
           <p className="mt-0.5 font-display text-base font-extrabold text-foreground">
-            {correctText}
+            {displayCorrect}
           </p>
         </div>
       </div>

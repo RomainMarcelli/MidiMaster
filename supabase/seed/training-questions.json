@@ -1,0 +1,1252 @@
+[
+  {
+    "type": "quizz_2",
+    "category_slug": "histoire",
+    "format": "vrai_faux",
+    "difficulte": 1,
+    "enonce": "Napoléon Bonaparte est né en Corse.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Napoléon est né à Ajaccio le 15 août 1769."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "histoire",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "La prise de la Bastille a eu lieu le 14 juillet 1789.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "La prise de la Bastille marque le début symbolique de la Révolution française."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "histoire",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "Jeanne d'Arc a été brûlée vive à Paris.",
+    "reponses": [
+      { "text": "Vrai", "correct": false },
+      { "text": "Faux", "correct": true }
+    ],
+    "explication": "Jeanne d'Arc a été brûlée à Rouen le 30 mai 1431."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "histoire",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "La Première Guerre mondiale s'est terminée en 1918.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "L'armistice a été signé le 11 novembre 1918 dans la clairière de Rethondes."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "histoire",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "Charlemagne a été couronné empereur en l'an 800.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Charlemagne a été couronné par le pape Léon III à Rome le 25 décembre 800."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "geographie",
+    "format": "vrai_faux",
+    "difficulte": 1,
+    "enonce": "Paris est la capitale de la France.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Paris est la capitale et la plus grande ville de France."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "geographie",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "Le Mont Blanc est le plus haut sommet d'Europe occidentale.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Le Mont Blanc culmine à 4 808 mètres dans les Alpes franco-italiennes."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "geographie",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "L'Australie est le plus grand pays du monde.",
+    "reponses": [
+      { "text": "Vrai", "correct": false },
+      { "text": "Faux", "correct": true }
+    ],
+    "explication": "La Russie est le plus grand pays. L'Australie est 6e par superficie."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "geographie",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "Le Nil est le plus long fleuve du monde.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Le Nil mesure environ 6 650 km, devant l'Amazone."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "sport",
+    "format": "vrai_faux",
+    "difficulte": 1,
+    "enonce": "Un match de football dure 90 minutes réglementaires.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "90 minutes réparties en deux mi-temps de 45 minutes."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "sport",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "Le Tour de France est une course annuelle créée en 1903.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "La 1ère édition du Tour de France a eu lieu en juillet 1903."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "sport",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "Au tennis, un jeu se gagne à 6 points.",
+    "reponses": [
+      { "text": "Vrai", "correct": false },
+      { "text": "Faux", "correct": true }
+    ],
+    "explication": "Un jeu se compte 15-30-40-jeu : il faut 4 points (avec 2 points d'écart)."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "sport",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "Les premiers Jeux olympiques modernes ont eu lieu à Athènes.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Athènes a accueilli les premiers JO modernes en 1896."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "art",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "La Joconde est exposée au Louvre.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Le tableau de Léonard de Vinci est exposé au musée du Louvre à Paris."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "art",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "Vincent van Gogh est un peintre français.",
+    "reponses": [
+      { "text": "Vrai", "correct": false },
+      { "text": "Faux", "correct": true }
+    ],
+    "explication": "Van Gogh était un peintre néerlandais (1853-1890)."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "art",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "Picasso a peint Guernica en 1937.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Guernica a été peint en réaction au bombardement de la ville espagnole."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "art",
+    "format": "vrai_faux",
+    "difficulte": 4,
+    "enonce": "Le Penseur est une sculpture d'Auguste Rodin.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Le Penseur fait partie du groupe La Porte de l'Enfer (1880-1917)."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "litterature",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "Victor Hugo a écrit Les Misérables.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Roman publié en 1862, considéré comme un chef-d'œuvre du XIXe siècle."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "litterature",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "L'auteur de Hamlet est William Shakespeare.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Hamlet est une tragédie écrite par Shakespeare vers 1600."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "litterature",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "Le Petit Prince a été écrit par Antoine de Saint-Exupéry.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Publié en 1943, c'est l'œuvre française la plus traduite au monde."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "litterature",
+    "format": "vrai_faux",
+    "difficulte": 4,
+    "enonce": "Marcel Proust a écrit À la recherche du temps perdu.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Cycle de 7 volumes publiés entre 1913 et 1927."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "svt",
+    "format": "vrai_faux",
+    "difficulte": 1,
+    "enonce": "Le cœur humain compte 4 cavités.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "2 oreillettes et 2 ventricules."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "svt",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "Le squelette humain adulte contient 206 os.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Les bébés naissent avec environ 270 os qui fusionnent avec l'âge."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "svt",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "Les baleines sont des poissons.",
+    "reponses": [
+      { "text": "Vrai", "correct": false },
+      { "text": "Faux", "correct": true }
+    ],
+    "explication": "Les baleines sont des mammifères marins (allaitement, poumons)."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "svt",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "L'ADN se trouve dans le noyau des cellules.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "L'ADN est principalement dans le noyau, une petite partie dans les mitochondries."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "chimie",
+    "format": "vrai_faux",
+    "difficulte": 1,
+    "enonce": "L'eau a pour formule chimique H2O.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Une molécule d'eau : 2 atomes d'hydrogène + 1 atome d'oxygène."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "chimie",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "L'or a pour symbole chimique Au.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Au vient du latin Aurum."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "chimie",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "Le tableau périodique a été inventé par Mendeleïev.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Dimitri Mendeleïev a publié sa première version en 1869."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "physique",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "La vitesse de la lumière est d'environ 300 000 km/s.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Précisément 299 792 458 m/s dans le vide."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "physique",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "Albert Einstein a publié sa théorie de la relativité restreinte en 1905.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "1905 fut son annus mirabilis avec 4 articles fondateurs."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "physique",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "Le son se propage plus vite dans l'eau que dans l'air.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Environ 1 480 m/s dans l'eau contre 343 m/s dans l'air."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "jeu-video",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "Mario est un personnage créé par Nintendo.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Mario est apparu dans Donkey Kong (1981), créé par Shigeru Miyamoto."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "jeu-video",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "Tetris a été conçu en Russie dans les années 1980.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Tetris a été créé par Alexeï Pajitnov en 1984 à Moscou."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "jeu-video",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "PlayStation est une console fabriquée par Microsoft.",
+    "reponses": [
+      { "text": "Vrai", "correct": false },
+      { "text": "Faux", "correct": true }
+    ],
+    "explication": "La PlayStation est fabriquée par Sony depuis 1994."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "actualite",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "L'Union européenne compte plus de 20 États membres.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "L'UE compte 27 États membres (après le Brexit de 2020)."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "actualite",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "L'euro est la monnaie officielle de la France.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "L'euro a remplacé le franc en 2002 (entrée en circulation)."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "actualite",
+    "format": "vrai_faux",
+    "difficulte": 4,
+    "enonce": "Le Brexit a été acté par référendum britannique en 2016.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Le 23 juin 2016, 52 % des Britanniques ont voté pour quitter l'UE."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "cinema-tv",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "Titanic est un film réalisé par James Cameron.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Titanic (1997) a remporté 11 Oscars dont meilleur film."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "cinema-tv",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "Star Wars épisode IV est sorti en 1977.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Un nouvel espoir, premier film de la saga, sorti le 25 mai 1977."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "cinema-tv",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "Les Dents de la mer est un film de Steven Spielberg.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Sorti en 1975, considéré comme le premier blockbuster moderne."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "cinema-tv",
+    "format": "vrai_faux",
+    "difficulte": 4,
+    "enonce": "Le festival de Cannes décerne la Palme d'or chaque année.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Plus haute récompense du festival, créée en 1955."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "musique",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "Mozart est un compositeur autrichien.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Wolfgang Amadeus Mozart (1756-1791), né à Salzbourg."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "musique",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "Les Beatles sont originaires de Liverpool.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Le groupe s'est formé à Liverpool en 1960."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "musique",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "La Symphonie n° 9 de Beethoven inclut un chœur.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Le 4e mouvement intègre l'Ode à la joie pour chœur et orchestre."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "gastronomie",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "Le camembert est un fromage normand.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Le camembert de Normandie bénéficie d'une AOP depuis 1983."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "gastronomie",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "La paella est un plat traditionnel italien.",
+    "reponses": [
+      { "text": "Vrai", "correct": false },
+      { "text": "Faux", "correct": true }
+    ],
+    "explication": "La paella est un plat espagnol, originaire de la région de Valence."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "gastronomie",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "Le cassoulet est une spécialité du sud-ouest de la France.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Castelnaudary, Carcassonne et Toulouse se disputent la paternité."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "culture-g",
+    "format": "vrai_faux",
+    "difficulte": 1,
+    "enonce": "Une année bissextile dure 366 jours.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Une année bissextile compte un 29 février supplémentaire."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "culture-g",
+    "format": "vrai_faux",
+    "difficulte": 2,
+    "enonce": "L'arc-en-ciel comporte 7 couleurs.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "Rouge, orange, jaune, vert, bleu, indigo, violet (selon Newton)."
+  },
+  {
+    "type": "quizz_2",
+    "category_slug": "culture-g",
+    "format": "vrai_faux",
+    "difficulte": 3,
+    "enonce": "L'ONU a été fondée en 1945.",
+    "reponses": [
+      { "text": "Vrai", "correct": true },
+      { "text": "Faux", "correct": false }
+    ],
+    "explication": "La Charte des Nations unies est signée le 26 juin 1945 à San Francisco."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "histoire",
+    "difficulte": 2,
+    "enonce": "En quelle année Christophe Colomb a-t-il atteint l'Amérique ?",
+    "reponses": [
+      { "text": "1492", "correct": true },
+      { "text": "1485", "correct": false },
+      { "text": "1502", "correct": false },
+      { "text": "1450", "correct": false }
+    ],
+    "explication": "Le 12 octobre 1492, Christophe Colomb débarque sur l'île de Guanahani."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "histoire",
+    "difficulte": 3,
+    "enonce": "Quel roi de France est surnommé le Roi-Soleil ?",
+    "reponses": [
+      { "text": "Louis XIV", "correct": true },
+      { "text": "Louis XIII", "correct": false },
+      { "text": "Louis XV", "correct": false },
+      { "text": "François Ier", "correct": false }
+    ],
+    "explication": "Louis XIV (1638-1715) régna 72 ans, le plus long règne de France."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "histoire",
+    "difficulte": 3,
+    "enonce": "Qui a fondé l'Empire mongol ?",
+    "reponses": [
+      { "text": "Gengis Khan", "correct": true },
+      { "text": "Kubilai Khan", "correct": false },
+      { "text": "Tamerlan", "correct": false },
+      { "text": "Atilla", "correct": false }
+    ],
+    "explication": "Gengis Khan a unifié les tribus mongoles vers 1206."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "histoire",
+    "difficulte": 4,
+    "enonce": "Quelle bataille marque la fin de Napoléon en 1815 ?",
+    "reponses": [
+      { "text": "Waterloo", "correct": true },
+      { "text": "Austerlitz", "correct": false },
+      { "text": "Iéna", "correct": false },
+      { "text": "Trafalgar", "correct": false }
+    ],
+    "explication": "Le 18 juin 1815, Napoléon est défait à Waterloo en Belgique."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "geographie",
+    "difficulte": 2,
+    "enonce": "Quelle est la capitale de l'Australie ?",
+    "reponses": [
+      { "text": "Canberra", "correct": true },
+      { "text": "Sydney", "correct": false },
+      { "text": "Melbourne", "correct": false },
+      { "text": "Perth", "correct": false }
+    ],
+    "explication": "Canberra est la capitale fédérale depuis 1908."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "geographie",
+    "difficulte": 2,
+    "enonce": "Quel pays a la forme d'une botte ?",
+    "reponses": [
+      { "text": "Italie", "correct": true },
+      { "text": "Espagne", "correct": false },
+      { "text": "Grèce", "correct": false },
+      { "text": "Portugal", "correct": false }
+    ],
+    "explication": "L'Italie est célèbre pour sa silhouette en forme de botte."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "geographie",
+    "difficulte": 3,
+    "enonce": "Quelle est la plus longue chaîne de montagnes du monde ?",
+    "reponses": [
+      { "text": "Les Andes", "correct": true },
+      { "text": "L'Himalaya", "correct": false },
+      { "text": "Les Rocheuses", "correct": false },
+      { "text": "L'Atlas", "correct": false }
+    ],
+    "explication": "Les Andes traversent 7 pays sur 7 100 km en Amérique du Sud."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "geographie",
+    "difficulte": 4,
+    "enonce": "Quel est le plus petit pays du monde ?",
+    "reponses": [
+      { "text": "Vatican", "correct": true },
+      { "text": "Monaco", "correct": false },
+      { "text": "Saint-Marin", "correct": false },
+      { "text": "Liechtenstein", "correct": false }
+    ],
+    "explication": "Le Vatican s'étend sur seulement 0,44 km²."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "sport",
+    "difficulte": 2,
+    "enonce": "Combien de joueurs composent une équipe de football sur le terrain ?",
+    "reponses": [
+      { "text": "11", "correct": true },
+      { "text": "10", "correct": false },
+      { "text": "12", "correct": false },
+      { "text": "9", "correct": false }
+    ],
+    "explication": "11 joueurs dont 1 gardien (FIFA)."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "sport",
+    "difficulte": 3,
+    "enonce": "Dans quel sport décerne-t-on la Coupe Stanley ?",
+    "reponses": [
+      { "text": "Hockey sur glace", "correct": true },
+      { "text": "Basketball", "correct": false },
+      { "text": "Football américain", "correct": false },
+      { "text": "Baseball", "correct": false }
+    ],
+    "explication": "La Coupe Stanley est le trophée de la NHL depuis 1893."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "sport",
+    "difficulte": 3,
+    "enonce": "Quelle ville a accueilli les JO d'hiver 1992 en France ?",
+    "reponses": [
+      { "text": "Albertville", "correct": true },
+      { "text": "Grenoble", "correct": false },
+      { "text": "Chamonix", "correct": false },
+      { "text": "Annecy", "correct": false }
+    ],
+    "explication": "Albertville a accueilli les XVIᵉ JO d'hiver en février 1992."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "art",
+    "difficulte": 2,
+    "enonce": "Qui a peint la Joconde ?",
+    "reponses": [
+      { "text": "Léonard de Vinci", "correct": true },
+      { "text": "Michel-Ange", "correct": false },
+      { "text": "Raphaël", "correct": false },
+      { "text": "Botticelli", "correct": false }
+    ],
+    "explication": "Peinte par Léonard de Vinci entre 1503 et 1519."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "art",
+    "difficulte": 3,
+    "enonce": "Quel mouvement artistique est associé à Claude Monet ?",
+    "reponses": [
+      { "text": "Impressionnisme", "correct": true },
+      { "text": "Cubisme", "correct": false },
+      { "text": "Surréalisme", "correct": false },
+      { "text": "Romantisme", "correct": false }
+    ],
+    "explication": "Monet est l'un des fondateurs de l'impressionnisme (Impression, soleil levant, 1872)."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "art",
+    "difficulte": 4,
+    "enonce": "Qui a sculpté la Vénus de Milo ?",
+    "reponses": [
+      { "text": "Anonyme", "correct": true },
+      { "text": "Phidias", "correct": false },
+      { "text": "Praxitèle", "correct": false },
+      { "text": "Myron", "correct": false }
+    ],
+    "explication": "L'auteur exact reste inconnu. La statue date d'environ 130-100 av. J.-C."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "litterature",
+    "difficulte": 2,
+    "enonce": "Qui a écrit Les Trois Mousquetaires ?",
+    "reponses": [
+      { "text": "Alexandre Dumas", "correct": true },
+      { "text": "Victor Hugo", "correct": false },
+      { "text": "Émile Zola", "correct": false },
+      { "text": "Honoré de Balzac", "correct": false }
+    ],
+    "explication": "Alexandre Dumas père, publié en feuilleton en 1844."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "litterature",
+    "difficulte": 3,
+    "enonce": "Qui a écrit 1984 ?",
+    "reponses": [
+      { "text": "George Orwell", "correct": true },
+      { "text": "Aldous Huxley", "correct": false },
+      { "text": "Ray Bradbury", "correct": false },
+      { "text": "Isaac Asimov", "correct": false }
+    ],
+    "explication": "George Orwell, roman dystopique publié en 1949."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "litterature",
+    "difficulte": 4,
+    "enonce": "Quel auteur a obtenu le prix Nobel de littérature en 1957 ?",
+    "reponses": [
+      { "text": "Albert Camus", "correct": true },
+      { "text": "Jean-Paul Sartre", "correct": false },
+      { "text": "Boris Pasternak", "correct": false },
+      { "text": "Ernest Hemingway", "correct": false }
+    ],
+    "explication": "Albert Camus a reçu le Nobel à 44 ans, parmi les plus jeunes lauréats."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "svt",
+    "difficulte": 2,
+    "enonce": "Quel organe filtre le sang chez l'humain ?",
+    "reponses": [
+      { "text": "Le rein", "correct": true },
+      { "text": "Le foie", "correct": false },
+      { "text": "Le poumon", "correct": false },
+      { "text": "L'estomac", "correct": false }
+    ],
+    "explication": "Les reins filtrent environ 180 L de sang par jour."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "svt",
+    "difficulte": 3,
+    "enonce": "Quelle est la plus grande planète du système solaire ?",
+    "reponses": [
+      { "text": "Jupiter", "correct": true },
+      { "text": "Saturne", "correct": false },
+      { "text": "Neptune", "correct": false },
+      { "text": "Mars", "correct": false }
+    ],
+    "explication": "Jupiter a un diamètre 11 fois supérieur à celui de la Terre."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "svt",
+    "difficulte": 3,
+    "enonce": "Quel gaz est principalement responsable de l'effet de serre ?",
+    "reponses": [
+      { "text": "CO2", "correct": true },
+      { "text": "Oxygène", "correct": false },
+      { "text": "Azote", "correct": false },
+      { "text": "Argon", "correct": false }
+    ],
+    "explication": "Le dioxyde de carbone est le principal GES anthropique."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "chimie",
+    "difficulte": 2,
+    "enonce": "Quel est le symbole du fer ?",
+    "reponses": [
+      { "text": "Fe", "correct": true },
+      { "text": "F", "correct": false },
+      { "text": "Ir", "correct": false },
+      { "text": "Fr", "correct": false }
+    ],
+    "explication": "Fe vient du latin Ferrum."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "chimie",
+    "difficulte": 3,
+    "enonce": "Combien d'éléments le tableau périodique contient-il (env.) ?",
+    "reponses": [
+      { "text": "118", "correct": true },
+      { "text": "92", "correct": false },
+      { "text": "150", "correct": false },
+      { "text": "100", "correct": false }
+    ],
+    "explication": "118 éléments officiellement reconnus, dont les 4 derniers (113-118) confirmés en 2016."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "chimie",
+    "difficulte": 4,
+    "enonce": "Quel pH a une solution neutre ?",
+    "reponses": [
+      { "text": "7", "correct": true },
+      { "text": "0", "correct": false },
+      { "text": "14", "correct": false },
+      { "text": "10", "correct": false }
+    ],
+    "explication": "L'eau pure a un pH de 7. <7 = acide, >7 = basique."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "physique",
+    "difficulte": 3,
+    "enonce": "Qui a énoncé les trois lois du mouvement ?",
+    "reponses": [
+      { "text": "Isaac Newton", "correct": true },
+      { "text": "Galilée", "correct": false },
+      { "text": "Albert Einstein", "correct": false },
+      { "text": "Stephen Hawking", "correct": false }
+    ],
+    "explication": "Newton les a publiées dans les Principia (1687)."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "physique",
+    "difficulte": 4,
+    "enonce": "Quelle unité mesure la force ?",
+    "reponses": [
+      { "text": "Newton", "correct": true },
+      { "text": "Joule", "correct": false },
+      { "text": "Watt", "correct": false },
+      { "text": "Pascal", "correct": false }
+    ],
+    "explication": "1 N = force nécessaire pour accélérer 1 kg de 1 m/s²."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "physique",
+    "difficulte": 4,
+    "enonce": "Quelle particule a une charge électrique négative ?",
+    "reponses": [
+      { "text": "Électron", "correct": true },
+      { "text": "Proton", "correct": false },
+      { "text": "Neutron", "correct": false },
+      { "text": "Photon", "correct": false }
+    ],
+    "explication": "L'électron a une charge -e, le proton +e, le neutron 0."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "jeu-video",
+    "difficulte": 3,
+    "enonce": "Quelle est la mascotte de SEGA dans les années 90 ?",
+    "reponses": [
+      { "text": "Sonic", "correct": true },
+      { "text": "Mario", "correct": false },
+      { "text": "Pikachu", "correct": false },
+      { "text": "Crash Bandicoot", "correct": false }
+    ],
+    "explication": "Sonic le hérisson, créé en 1991 pour la Megadrive."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "jeu-video",
+    "difficulte": 4,
+    "enonce": "Dans quel pays a été créé Pokémon ?",
+    "reponses": [
+      { "text": "Japon", "correct": true },
+      { "text": "États-Unis", "correct": false },
+      { "text": "Corée du Sud", "correct": false },
+      { "text": "Royaume-Uni", "correct": false }
+    ],
+    "explication": "Game Freak (japonais) a créé Pokémon en 1996 pour Nintendo."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "jeu-video",
+    "difficulte": 4,
+    "enonce": "Qui est le créateur de Minecraft ?",
+    "reponses": [
+      { "text": "Markus Persson", "correct": true },
+      { "text": "Hideo Kojima", "correct": false },
+      { "text": "Sid Meier", "correct": false },
+      { "text": "John Carmack", "correct": false }
+    ],
+    "explication": "Markus Persson alias Notch, suédois, en 2009."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "actualite",
+    "difficulte": 3,
+    "enonce": "Combien d'États composent les États-Unis ?",
+    "reponses": [
+      { "text": "50", "correct": true },
+      { "text": "48", "correct": false },
+      { "text": "52", "correct": false },
+      { "text": "49", "correct": false }
+    ],
+    "explication": "50 États depuis l'admission d'Hawaï en 1959."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "actualite",
+    "difficulte": 4,
+    "enonce": "Quelle est la monnaie du Japon ?",
+    "reponses": [
+      { "text": "Yen", "correct": true },
+      { "text": "Yuan", "correct": false },
+      { "text": "Won", "correct": false },
+      { "text": "Ringgit", "correct": false }
+    ],
+    "explication": "Le yen japonais (JPY) circule depuis 1871."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "cinema-tv",
+    "difficulte": 2,
+    "enonce": "Qui a réalisé Pulp Fiction ?",
+    "reponses": [
+      { "text": "Quentin Tarantino", "correct": true },
+      { "text": "Martin Scorsese", "correct": false },
+      { "text": "Ridley Scott", "correct": false },
+      { "text": "Stanley Kubrick", "correct": false }
+    ],
+    "explication": "Pulp Fiction (1994) a obtenu la Palme d'or à Cannes."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "cinema-tv",
+    "difficulte": 3,
+    "enonce": "Quel acteur joue le rôle principal dans Forrest Gump ?",
+    "reponses": [
+      { "text": "Tom Hanks", "correct": true },
+      { "text": "Robin Williams", "correct": false },
+      { "text": "Tom Cruise", "correct": false },
+      { "text": "Brad Pitt", "correct": false }
+    ],
+    "explication": "Tom Hanks a remporté l'Oscar du meilleur acteur en 1995."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "cinema-tv",
+    "difficulte": 4,
+    "enonce": "Quelle est la franchise au plus grand box-office mondial ?",
+    "reponses": [
+      { "text": "Marvel Cinematic Universe", "correct": true },
+      { "text": "Star Wars", "correct": false },
+      { "text": "Harry Potter", "correct": false },
+      { "text": "James Bond", "correct": false }
+    ],
+    "explication": "Le MCU dépasse 30 milliards de dollars cumulés."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "musique",
+    "difficulte": 3,
+    "enonce": "Quel groupe a sorti l'album Dark Side of the Moon ?",
+    "reponses": [
+      { "text": "Pink Floyd", "correct": true },
+      { "text": "Led Zeppelin", "correct": false },
+      { "text": "Queen", "correct": false },
+      { "text": "The Rolling Stones", "correct": false }
+    ],
+    "explication": "Album culte de 1973, plus de 45 millions d'exemplaires vendus."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "musique",
+    "difficulte": 4,
+    "enonce": "Quel compositeur est devenu sourd à la fin de sa vie ?",
+    "reponses": [
+      { "text": "Beethoven", "correct": true },
+      { "text": "Mozart", "correct": false },
+      { "text": "Bach", "correct": false },
+      { "text": "Vivaldi", "correct": false }
+    ],
+    "explication": "Ludwig van Beethoven a composé sa 9ᵉ symphonie en étant sourd."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "musique",
+    "difficulte": 4,
+    "enonce": "Combien de touches a un piano standard ?",
+    "reponses": [
+      { "text": "88", "correct": true },
+      { "text": "76", "correct": false },
+      { "text": "100", "correct": false },
+      { "text": "61", "correct": false }
+    ],
+    "explication": "52 touches blanches + 36 touches noires = 88, sur 7 octaves et un quart."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "gastronomie",
+    "difficulte": 3,
+    "enonce": "Quel est l'ingrédient principal du houmous ?",
+    "reponses": [
+      { "text": "Pois chiches", "correct": true },
+      { "text": "Lentilles", "correct": false },
+      { "text": "Haricots blancs", "correct": false },
+      { "text": "Fèves", "correct": false }
+    ],
+    "explication": "Le houmous est une purée de pois chiches au tahini, citron, ail."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "gastronomie",
+    "difficulte": 4,
+    "enonce": "De quel pays vient le sushi ?",
+    "reponses": [
+      { "text": "Japon", "correct": true },
+      { "text": "Chine", "correct": false },
+      { "text": "Corée", "correct": false },
+      { "text": "Vietnam", "correct": false }
+    ],
+    "explication": "Le sushi est une spécialité japonaise à base de riz vinaigré."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "gastronomie",
+    "difficulte": 4,
+    "enonce": "Combien y a-t-il de classements maximum au Guide Michelin ?",
+    "reponses": [
+      { "text": "3 étoiles", "correct": true },
+      { "text": "5 étoiles", "correct": false },
+      { "text": "4 étoiles", "correct": false },
+      { "text": "2 étoiles", "correct": false }
+    ],
+    "explication": "Le Guide Michelin décerne maximum 3 étoiles depuis 1933."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "culture-g",
+    "difficulte": 2,
+    "enonce": "Combien de continents y a-t-il ?",
+    "reponses": [
+      { "text": "7", "correct": true },
+      { "text": "5", "correct": false },
+      { "text": "6", "correct": false },
+      { "text": "8", "correct": false }
+    ],
+    "explication": "Afrique, Amérique du Nord, Amérique du Sud, Antarctique, Asie, Europe, Océanie."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "culture-g",
+    "difficulte": 3,
+    "enonce": "Quelle langue a le plus de locuteurs natifs ?",
+    "reponses": [
+      { "text": "Mandarin", "correct": true },
+      { "text": "Anglais", "correct": false },
+      { "text": "Espagnol", "correct": false },
+      { "text": "Hindi", "correct": false }
+    ],
+    "explication": "Le mandarin compte plus de 900 millions de locuteurs natifs."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "culture-g",
+    "difficulte": 4,
+    "enonce": "Combien de couleurs sur un drapeau français ?",
+    "reponses": [
+      { "text": "3", "correct": true },
+      { "text": "2", "correct": false },
+      { "text": "4", "correct": false },
+      { "text": "5", "correct": false }
+    ],
+    "explication": "Bleu, blanc, rouge — drapeau adopté en 1794."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "histoire",
+    "difficulte": 4,
+    "enonce": "Quelle dynastie chinoise a construit la Grande Muraille principale ?",
+    "reponses": [
+      { "text": "Ming", "correct": true },
+      { "text": "Han", "correct": false },
+      { "text": "Tang", "correct": false },
+      { "text": "Qing", "correct": false }
+    ],
+    "explication": "La majeure partie visible aujourd'hui date de la dynastie Ming (1368-1644)."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "geographie",
+    "difficulte": 4,
+    "enonce": "Quelle est la capitale du Canada ?",
+    "reponses": [
+      { "text": "Ottawa", "correct": true },
+      { "text": "Toronto", "correct": false },
+      { "text": "Montréal", "correct": false },
+      { "text": "Vancouver", "correct": false }
+    ],
+    "explication": "Ottawa est la capitale fédérale du Canada depuis 1867."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "sport",
+    "difficulte": 4,
+    "enonce": "En quelle année la France a-t-elle gagné sa première Coupe du monde de football ?",
+    "reponses": [
+      { "text": "1998", "correct": true },
+      { "text": "2002", "correct": false },
+      { "text": "1986", "correct": false },
+      { "text": "2018", "correct": false }
+    ],
+    "explication": "Première victoire française à domicile en 1998, 3-0 contre le Brésil."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "art",
+    "difficulte": 4,
+    "enonce": "Quel artiste a réalisé La Persistance de la mémoire (montres molles) ?",
+    "reponses": [
+      { "text": "Salvador Dalí", "correct": true },
+      { "text": "René Magritte", "correct": false },
+      { "text": "Joan Miró", "correct": false },
+      { "text": "Marc Chagall", "correct": false }
+    ],
+    "explication": "Tableau surréaliste de Salvador Dalí peint en 1931."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "litterature",
+    "difficulte": 3,
+    "enonce": "Quel est le titre du premier tome de Harry Potter ?",
+    "reponses": [
+      { "text": "L'École des sorciers", "correct": true },
+      { "text": "La Chambre des secrets", "correct": false },
+      { "text": "Le Prisonnier d'Azkaban", "correct": false },
+      { "text": "La Coupe de feu", "correct": false }
+    ],
+    "explication": "Publié en 1997 par J.K. Rowling, titre français adapté de Philosopher's Stone."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "actualite",
+    "difficulte": 4,
+    "enonce": "Quelle organisation décerne le prix Nobel de la paix ?",
+    "reponses": [
+      { "text": "Comité Nobel norvégien", "correct": true },
+      { "text": "Académie suédoise", "correct": false },
+      { "text": "ONU", "correct": false },
+      { "text": "Institut Karolinska", "correct": false }
+    ],
+    "explication": "Seul prix Nobel décerné à Oslo (Norvège) — les autres sont à Stockholm (Suède)."
+  },
+  {
+    "type": "quizz_4",
+    "category_slug": "culture-g",
+    "difficulte": 3,
+    "enonce": "Combien de minutes y a-t-il dans une journée ?",
+    "reponses": [
+      { "text": "1440", "correct": true },
+      { "text": "1200", "correct": false },
+      { "text": "2400", "correct": false },
+      { "text": "1800", "correct": false }
+    ],
+    "explication": "24 heures × 60 minutes = 1 440 minutes."
+  }
+]
