@@ -110,12 +110,13 @@ export function TvHostLanding() {
           )}
         </button>
 
-        {/* Bouton "Rejoindre" : pointe vers /play (publique, code à 4 chiffres).
-            Mêmes h-12 + px-6 + text-lg que le bouton or pour un alignement
-            parfait des 2 CTAs côte à côte. */}
+        {/* Q1.1 — Bouton "Rejoindre" en style "outline gold" pour cohérence
+            avec la DA navy/or (ne pas se distinguer comme un bouton sky qui
+            cassait la palette). Mêmes h-12 + px-6 + text-lg que le bouton
+            primary pour alignement parfait des 2 CTAs côte à côte. */}
         <Link
           href="/play"
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border-2 border-sky/50 bg-card px-6 text-lg font-bold text-sky transition-all hover:-translate-y-px hover:border-sky hover:bg-sky/5 hover:shadow-[0_5px_16px_rgba(43,142,230,0.35)]"
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border-2 border-gold bg-cream px-6 text-lg font-bold text-gold-warm transition-all hover:-translate-y-px hover:bg-gold/10 hover:shadow-[0_5px_16px_rgba(245,183,0,0.35)]"
         >
           <Gamepad2 className="h-5 w-5" aria-hidden="true" />
           Rejoindre une partie

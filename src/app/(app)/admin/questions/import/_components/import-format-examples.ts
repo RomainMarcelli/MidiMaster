@@ -109,9 +109,9 @@ export const FORMATS: FormatExample[] = [
   },
   {
     type: "quizz_2",
-    label: "quizz_2 — Choix binaire (Vrai/Faux, L'un ou l'autre, Plus/Moins)",
+    label: "quizz_2 — Choix binaire (Vrai/Faux, L'un ou l'autre, Plus/Moins, Choix 2)",
     description:
-      "QCM à 2 options. Optionnel : préciser le `format` pour activer le mode Vrai/Faux ou Plus/Moins.",
+      "QCM à 2 options. Optionnel : préciser le `format` pour activer le mode Vrai/Faux, Plus/Moins, L'un ou l'autre ou un choix binaire générique (`choix_2`).",
     modes: ["Le Coup d'Envoi", "Marathon"],
     requiredFields: [
       { name: "type", type: '"quizz_2"' },
@@ -126,8 +126,9 @@ export const FORMATS: FormatExample[] = [
     optionalFields: [
       {
         name: "format",
-        type: '"vrai_faux" | "ou" | "plus_moins"',
-        description: "active un rendu spécial (boutons Vrai/Faux, etc.)",
+        type: '"vrai_faux" | "ou" | "plus_moins" | "choix_2"',
+        description:
+          "active un rendu spécial (boutons Vrai/Faux, etc.). `choix_2` = 2 choix génériques sans contrainte de libellé.",
       },
       { name: "difficulte", type: "1-5" },
       { name: "explication", type: "string" },
@@ -137,6 +138,7 @@ export const FORMATS: FormatExample[] = [
       "Exactement 1 réponse avec `correct: true`.",
       'Si `format: "vrai_faux"` → les réponses doivent être "Vrai" et "Faux".',
       'Si `format: "plus_moins"` → les réponses doivent être "Plus" et "Moins".',
+      'Si `format: "choix_2"` → aucune contrainte sur les libellés des réponses (choix binaire générique).',
     ],
     example: {
       type: "quizz_2",

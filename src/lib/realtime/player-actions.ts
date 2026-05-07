@@ -93,6 +93,10 @@ export async function joinRoom(input: {
 
   const supabase = createClient();
   const token = generatePlayerToken();
+  // Vague T (#6) — On n'écrit plus `is_connected` : la presence WS est
+  // désormais l'unique source pour la connectivité (cf. tv-channel.ts).
+  // La colonne BDD reste à TRUE par défaut comme cache informatif mais
+  // n'est plus consultée par l'UI.
   const { data, error } = await supabase
     .from("tv_room_players")
     .insert({
@@ -100,7 +104,6 @@ export async function joinRoom(input: {
       player_token: token,
       pseudo: input.pseudo.trim(),
       avatar_url: input.avatarUrl ?? null,
-      is_connected: true,
       last_seen_at: new Date().toISOString(),
     })
     .select("id")
@@ -122,8 +125,9 @@ export async function joinRoom(input: {
 
 /**
  * Reconnexion : retrouve la ligne tv_room_players via le token stocké.
- * Met à jour `is_connected = true` et `last_seen_at`. Retourne `null`
- * si le token n'existe plus (room terminée ou ligne supprimée).
+ * Vague T (#6) — Touche juste `last_seen_at` (la presence WS reprend
+ * automatiquement à la reconnexion du channel ; `is_connected` n'est
+ * plus consulté).
  */
 export async function rejoinRoomByToken(input: {
   code: string;
@@ -143,7 +147,7 @@ export async function rejoinRoomByToken(input: {
   }
   await supabase
     .from("tv_room_players")
-    .update({ is_connected: true, last_seen_at: new Date().toISOString() })
+    .update({ last_seen_at: new Date().toISOString() })
     .eq("id", existing.id as string)
     .eq("player_token", input.token);
   return {

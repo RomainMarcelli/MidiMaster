@@ -20,6 +20,13 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { PlayProfileEditModal } from "../play-profile-edit-modal";
 import { PlayFaceAFaceView } from "../play-face-a-face-view";
+import {
+  PlayDouzeCoupsView,
+  type PlayDouzeCoupsInitialEvent,
+} from "../play-douze-coups-view";
+import { AnswerButtons } from "@/components/tv/AnswerButtons";
+import { RoomClosedOverlay } from "@/components/tv/RoomClosedOverlay";
+import { TrainingQuizz } from "../training-quizz";
 
 interface PlayLightClientProps {
   code: string;
@@ -30,16 +37,10 @@ interface PlayLightClientProps {
 
 type Phase = "waiting" | "playing" | "result" | "ended";
 
-const ANSWER_COLORS = [
-  "bg-buzz text-white", // A = rouge
-  "bg-sky text-on-color", // B = bleu
-  "bg-life-green text-on-color", // C = vert
-  "bg-life-yellow text-on-color", // D = jaune
-];
-
 /**
- * UI téléphone : pendant son tour, 4 (ou 2) gros boutons couleurs A/B/C/D
- * occupent l'écran. Hors tour : "X est en train de jouer…" + score/état.
+ * UI téléphone : pendant son tour, des gros boutons A/B (ou A/B/C/D) en
+ * layout horizontal occupent l'écran (Q2.1 — palette navy/or, plus de
+ * rouge/bleu agressif). Hors tour : "X est en train de jouer…" + état.
  *
  * Vibration + flash or au passage du tour. Heartbeat de 12 s pour signaler
  * la connexion. Reconnexion auto si on revient sur la page (via token
@@ -69,6 +70,27 @@ export function PlayLightClient({
   >("waiting");
   // P5.1 — Bascule en vue face-à-face quand on reçoit fa:vote-start.
   const [faMode, setFaMode] = useState(false);
+  // Vague R — Bascule en vue 12 Coups TV (Coup d'Envoi / Coup par Coup /
+  // duels) dès qu'on reçoit le premier event dc:* depuis la TV. Liste des
+  // joueurs chargée depuis la BDD (utile pour la sélection de candidat duel).
+  // Vague U (#1.1) — On capture l'event qui déclenche dcMode pour
+  // l'hydrater dans PlayDouzeCoupsView au mount (sinon il est perdu :
+  // PlayDouzeCoupsView mount APRÈS le 1er ce:question-show et bind ses
+  // listeners trop tard).
+  const [dcMode, setDcMode] = useState(false);
+  const [dcInitialEvent, setDcInitialEvent] =
+    useState<PlayDouzeCoupsInitialEvent | null>(null);
+  const [dcPlayers, setDcPlayers] = useState<
+    Array<{
+      token: string;
+      pseudo: string;
+      avatarUrl: string | null;
+      isEliminated: boolean;
+    }>
+  >([]);
+  // Q3.1 — Overlay full-screen "Partie fermée par l'hôte" quand on reçoit
+  // l'event room:closed depuis la TV.
+  const [roomClosed, setRoomClosed] = useState(false);
 
   // Reconnexion auto au mount
   useEffect(() => {
@@ -101,6 +123,55 @@ export function PlayLightClient({
         setAvatarUrl((data?.avatar_url as string | null) ?? null);
       });
   }, [playerId]);
+
+  // Vague R — Charge la liste de tous les joueurs de la room (pour la
+  // sélection de candidat lors d'un duel). On rafraichit aussi sur
+  // changements postgres pour refléter joueurs éliminés / pseudos modifiés.
+  useEffect(() => {
+    const supabase = createClient();
+    let cancelled = false;
+    function load() {
+      void supabase
+        .from("tv_room_players")
+        .select("player_token, pseudo, avatar_url")
+        .eq("room_id", roomId)
+        .then(({ data }) => {
+          if (cancelled || !data) return;
+          setDcPlayers(
+            (
+              data as Array<{
+                player_token: string;
+                pseudo: string;
+                avatar_url: string | null;
+              }>
+            ).map((r) => ({
+              token: r.player_token,
+              pseudo: r.pseudo,
+              avatarUrl: r.avatar_url,
+              isEliminated: false,
+            })),
+          );
+        });
+    }
+    load();
+    const ch = supabase
+      .channel(`tv-room-players-light:${roomId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "tv_room_players",
+          filter: `room_id=eq.${roomId}`,
+        },
+        () => load(),
+      )
+      .subscribe();
+    return () => {
+      cancelled = true;
+      void supabase.removeChannel(ch);
+    };
+  }, [roomId]);
 
   // P2.1 — Suit le statut de la room (waiting/playing/...) pour verrouiller
   // l'édition de profil dès le démarrage.
@@ -190,6 +261,37 @@ export function PlayLightClient({
       setFaMode(true);
     });
 
+    // Vague R — Bascule en vue 12 Coups TV dès qu'on reçoit n'importe
+    // quel event de la phase Coup d'Envoi / Coup par Coup / duels.
+    // Vague U (#1.1) — On capture aussi l'event lui-même pour le passer
+    // en `initialEvent` à PlayDouzeCoupsView (qui mount APRÈS le bascule
+    // et perdrait sinon le 1er event). On ne setDcInitialEvent qu'une
+    // SEULE fois (le 1er) — les events suivants sont reçus par
+    // PlayDouzeCoupsView via ses propres listeners.
+    ch.on("ce:question-show", (payload) => {
+      setDcMode(true);
+      setDcInitialEvent((prev) =>
+        prev ?? { kind: "ce-question", payload },
+      );
+    });
+    ch.on("cpc:question-show", (payload) => {
+      setDcMode(true);
+      setDcInitialEvent((prev) =>
+        prev ?? { kind: "cpc-question", payload },
+      );
+    });
+    ch.on("ce:duel-start", (payload) => {
+      setDcMode(true);
+      setDcInitialEvent((prev) =>
+        prev ?? { kind: "duel-start", payload },
+      );
+    });
+
+    // Q3.1 — L'hôte a fermé la partie : bascule sur l'overlay redirect
+    ch.on("room:closed", () => {
+      setRoomClosed(true);
+    });
+
     function onBeforeUnload() {
       void ch.untrackPresence();
     }
@@ -232,36 +334,65 @@ export function PlayLightClient({
 
   if (!token) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-gold-warm" aria-hidden="true" />
-      </main>
+      <>
+        <main className="flex min-h-screen items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-gold-warm" aria-hidden="true" />
+        </main>
+        <RoomClosedOverlay visible={roomClosed} />
+      </>
     );
   }
 
   if (phase === "ended") {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
-        <Trophy
-          className="h-16 w-16 text-gold-warm"
-          aria-hidden="true"
-          fill="currentColor"
-        />
-        <h1 className="font-display text-3xl font-extrabold text-foreground">
-          Partie terminée !
-        </h1>
-        <p className="text-foreground/70">
-          Tes réponses : <strong className="text-life-green">{score}</strong> bonnes.
-        </p>
-        <p className="text-sm text-foreground/50">
-          Le classement final est sur la TV.
-        </p>
-      </main>
+      <>
+        <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
+          <Trophy
+            className="h-16 w-16 text-gold-warm"
+            aria-hidden="true"
+            fill="currentColor"
+          />
+          <h1 className="font-display text-3xl font-extrabold text-foreground">
+            Partie terminée !
+          </h1>
+          <p className="text-foreground/70">
+            Tes réponses : <strong className="text-life-green">{score}</strong> bonnes.
+          </p>
+          <p className="text-sm text-foreground/50">
+            Le classement final est sur la TV.
+          </p>
+        </main>
+        <RoomClosedOverlay visible={roomClosed} />
+      </>
     );
   }
 
   // P5.1 — Bascule en mode face-à-face si la TV a déclenché le vote
   if (faMode && channelRef.current) {
-    return <PlayFaceAFaceView myToken={token} channel={channelRef.current} />;
+    return (
+      <>
+        <PlayFaceAFaceView myToken={token} channel={channelRef.current} />
+        <RoomClosedOverlay visible={roomClosed} />
+      </>
+    );
+  }
+
+  // Vague R — Bascule en vue 12 Coups TV (Coup d'Envoi / Coup par Coup /
+  // duels) dès que la TV envoie un event dc:*. La vue dispatche en interne
+  // selon la sous-phase (à toi / spectateur / duel-pick-candidate, etc.).
+  if (dcMode && channelRef.current) {
+    return (
+      <>
+        <PlayDouzeCoupsView
+          myToken={token}
+          myPseudo={pseudo || "..."}
+          channel={channelRef.current}
+          players={dcPlayers}
+          initialEvent={dcInitialEvent}
+        />
+        <RoomClosedOverlay visible={roomClosed} />
+      </>
+    );
   }
 
   const isMyTurn =
@@ -319,30 +450,14 @@ export function PlayLightClient({
       )}
 
       {isMyTurn && question ? (
-        <section className="grid flex-1 grid-cols-1 gap-3">
-          {question.choices.map((c) => {
-            const colorClass =
-              ANSWER_COLORS[c.idx] ?? "bg-foreground/10 text-foreground";
-            return (
-              <motion.button
-                key={c.idx}
-                type="button"
-                onClick={() => handleAnswer(c.idx)}
-                whileTap={{ scale: 0.97 }}
-                className={cn(
-                  "flex w-full items-center justify-center gap-3 rounded-3xl px-6 text-2xl font-extrabold uppercase shadow-lg",
-                  "min-h-[120px] flex-1",
-                  colorClass,
-                )}
-              >
-                <span className="font-display text-3xl">
-                  {String.fromCharCode(65 + c.idx)}
-                </span>
-                {fullMode && <span className="text-base normal-case">{c.text}</span>}
-              </motion.button>
-            );
-          })}
-        </section>
+        <AnswerButtons
+          choices={question.choices}
+          showText={fullMode}
+          enabled={phase === "playing"}
+          onAnswer={handleAnswer}
+          selectedIdx={result?.byToken === token ? result.chosenIdx : null}
+          correctIdx={result?.byToken === token ? result.correctIdx : null}
+        />
       ) : (
         <WaitingTurn question={question} myToken={token} />
       )}
@@ -362,6 +477,7 @@ export function PlayLightClient({
           initialAvatarUrl={avatarUrl}
         />
       )}
+      <RoomClosedOverlay visible={roomClosed} />
     </main>
   );
 }
@@ -375,12 +491,11 @@ function WaitingTurn({
 }) {
   const isMine = question?.currentPlayerToken === myToken;
   if (!question) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-foreground/60">
-        <Loader2 className="h-8 w-8 animate-spin" aria-hidden="true" />
-        <p>En attente de la première question…</p>
-      </div>
-    );
+    // Vague V (#2) — Plus de loader passif. On affiche un quiz d'entrainement
+    // infini pendant l'attente. La bascule vers la vraie partie se fait via
+    // les listeners `ce:question-show` / `cpc:question-show` / `ce:duel-start`
+    // qui flippent `dcMode = true` en amont (return early sur PlayDouzeCoupsView).
+    return <TrainingQuizz />;
   }
   if (isMine) return null;
   return (

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { asJsonb } from "@/lib/supabase/jsonb";
 import {
   DEFAULT_NOTIFICATION_SETTINGS,
   normalizeNotificationSettings,
@@ -22,14 +23,12 @@ export async function fetchNotificationSettings(): Promise<NotificationSettings>
 
   const { data } = await supabase
     .from("profiles")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .select("notification_settings" as any)
+    .select("notification_settings")
     .eq("id", user.id)
     .maybeSingle();
 
   if (!data) return DEFAULT_NOTIFICATION_SETTINGS;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return normalizeNotificationSettings((data as any).notification_settings);
+  return normalizeNotificationSettings(data.notification_settings);
 }
 
 export async function saveNotificationSettings(
@@ -44,8 +43,7 @@ export async function saveNotificationSettings(
   const normalized = normalizeNotificationSettings(settings);
   const { error } = await supabase
     .from("profiles")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .update({ notification_settings: normalized } as any)
+    .update({ notification_settings: asJsonb(normalized) })
     .eq("id", user.id);
 
   if (error) return { status: "error", message: error.message };

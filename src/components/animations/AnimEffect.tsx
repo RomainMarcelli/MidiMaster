@@ -364,7 +364,7 @@ function CrownAnim({ size, reduced }: { size: number; reduced: boolean }) {
             ? { y: 0, opacity: 1, rotate: 0 }
             : { y: [-size * 0.5, size * 0.05, 0], opacity: 1, rotate: [-15, 5, 0] }
         }
-        transition={{ duration: reduced ? 0.2 : 0.7, type: "spring", damping: 12 }}
+        transition={{ duration: reduced ? 0.2 : 0.7, ease: "easeOut" }}
         className="relative flex h-full w-full items-center justify-center"
       >
         <Crown

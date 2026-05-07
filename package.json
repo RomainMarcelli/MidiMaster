@@ -11,6 +11,8 @@
     "gen-icons": "node src/scripts/gen-icons.mjs",
     "reorg-public": "node src/scripts/reorg-public.mjs",
     "seed": "tsx src/scripts/seed.ts",
+    "gen-types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID --schema public > src/types/database.ts",
+    "gen-types:local": "supabase gen types typescript --local > src/types/database.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -41,6 +43,9 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/howler": "^2.2.12",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -49,6 +54,7 @@
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "jsdom": "^29.1.1",
     "serwist": "^9.5.7",
     "sharp": "^0.34.5",
     "tailwindcss": "^4",

@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Montserrat } from "next/font/google";
+import { Suspense } from "react";
 import { ConsoleFilter } from "@/components/layout/ConsoleFilter";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
+import { TopProgressBar } from "@/components/ui/TopProgressBar";
 import { getBuildBrand } from "@/lib/build-brand";
 import "./globals.css";
 
@@ -82,6 +84,11 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ConsoleFilter />
+        {/* Vague S8 — Barre de progression fine sur navigations Next.js.
+            Suspense requis car TopProgressBar utilise useSearchParams. */}
+        <Suspense fallback={null}>
+          <TopProgressBar />
+        </Suspense>
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

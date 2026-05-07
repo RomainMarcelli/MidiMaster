@@ -252,10 +252,11 @@ export function PlayJoinClient({
         Rejoindre
       </Button>
 
-      {/* Modal avatar : Pack DiceBear / Aléatoire / Photo / Upload.
-          `hideCustomTab` : la table `custom_avatars` exige l'auth, on
-          la cache pour les guests. `uploadBucket` "saved-players-avatars"
-          est public en INSERT (cf. RLS). */}
+      {/* Modal avatar : Pack DiceBear / Custom (admin) / Aléatoire /
+          Photo / Upload. `uploadBucket` "saved-players-avatars" est public
+          en INSERT (cf. RLS).
+          Vague U (#4) — `hideCustomTab` retiré : les guests peuvent
+          maintenant lire `custom_avatars` (cf. migration 0020). */}
       <AvatarPicker
         open={pickerOpen}
         currentUrl={avatarUrl}
@@ -263,7 +264,6 @@ export function PlayJoinClient({
         onPick={(url) => setAvatarUrl(url)}
         uploadBucket="saved-players-avatars"
         uploadPath="guest"
-        hideCustomTab
       />
     </main>
   );

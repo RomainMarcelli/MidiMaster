@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { asJsonb } from "@/lib/supabase/jsonb";
 import type { ShortcutsMap } from "./defaults";
 
 /**
@@ -18,14 +19,12 @@ export async function fetchShortcuts(): Promise<ShortcutsMap> {
 
   const { data } = await supabase
     .from("profiles")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .select("keyboard_shortcuts" as any)
+    .select("keyboard_shortcuts")
     .eq("id", user.id)
     .maybeSingle();
 
   if (!data) return {};
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const raw = (data as any).keyboard_shortcuts;
+  const raw = data.keyboard_shortcuts;
   if (!raw || typeof raw !== "object") return {};
   return raw as ShortcutsMap;
 }
@@ -41,8 +40,7 @@ export async function saveShortcuts(
 
   const { error } = await supabase
     .from("profiles")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .update({ keyboard_shortcuts: shortcuts } as any)
+    .update({ keyboard_shortcuts: asJsonb(shortcuts) })
     .eq("id", user.id);
 
   if (error) return { status: "error", message: error.message };
