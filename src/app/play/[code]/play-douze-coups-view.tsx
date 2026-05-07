@@ -13,6 +13,8 @@ import { AnswerReveal } from "@/components/tv/AnswerReveal";
 import { PlayerTurnsRedAnimation } from "@/components/tv/PlayerTurnsRedAnimation";
 import { PlayerTurnsOrangeAnimation } from "@/components/tv/PlayerTurnsOrangeAnimation";
 import { DuelAnnouncementAnimation } from "@/components/tv/DuelAnnouncementAnimation";
+import { EliminatedPlayerChoice } from "@/components/game/EliminatedPlayerChoice";
+import { TrainingQuizz } from "./training-quizz";
 import { cn } from "@/lib/utils";
 
 /**
@@ -158,6 +160,13 @@ export function PlayDouzeCoupsView({
   // Vague V (#7) — Pause partie (joueur a quitté) : pseudo du joueur
   // absent. Set par `game:paused`, clear par `game:resumed`.
   const [pausedByPseudo, setPausedByPseudo] = useState<string | null>(null);
+  // Vague X (#7) — Mode du joueur éliminé. `null` tant qu'on n'est pas
+  // éliminé. `choosing` quand on vient d'être éliminé (affiche les 2
+  // boutons). `spectator` reste dans la vue normale spectateur. `training`
+  // bascule sur le quiz d'entraînement.
+  const [eliminatedMode, setEliminatedMode] = useState<
+    "choosing" | "spectator" | "training" | null
+  >(null);
 
   useEffect(() => {
     // ---------- Coup d'Envoi ----------
@@ -266,6 +275,16 @@ export function PlayDouzeCoupsView({
       });
       setPhase("duel-result");
     });
+    // Vague X (#7) — Détection élimination du user pour proposer Suivre /
+    // S'entraîner. On écoute `ce:elimination` (event broadcasté par le host
+    // après applyDuelAnswer + 4.5s). Si `eliminatedToken === myToken`, on
+    // bascule sur l'écran de choix (sauf si l'utilisateur a déjà choisi
+    // training auparavant — improbable, un user n'est éliminé qu'une fois).
+    channel.on("ce:elimination", (payload) => {
+      if (payload.eliminatedToken === myToken) {
+        setEliminatedMode((prev) => (prev === null ? "choosing" : prev));
+      }
+    });
 
     // ---------- Coup par Coup ----------
     channel.on("cpc:question-show", (payload) => {
@@ -373,6 +392,38 @@ export function PlayDouzeCoupsView({
   // ============================================================
   // RENDU selon la phase
   // ============================================================
+
+  // Vague X (#7) — Joueur éliminé : choix Suivre / S'entraîner. Le choix est
+  // priorisé AVANT les animations pré-duel (sinon une anim cinématique d'un
+  // duel qui suit pourrait masquer l'écran de choix). Mais on laisse l'anim
+  // d'élimination cinématique de la TV jouer en parallèle (4.5s) — la vue
+  // de choix apparaît dès que `ce:elimination` est reçu côté téléphone.
+  if (eliminatedMode === "choosing") {
+    return (
+      <EliminatedPlayerChoice
+        pseudo={myPseudo}
+        onSpectate={() => setEliminatedMode("spectator")}
+        onTrain={() => setEliminatedMode("training")}
+      />
+    );
+  }
+  if (eliminatedMode === "training") {
+    return (
+      <main className="flex min-h-screen flex-col gap-4 bg-background p-4">
+        <div className="rounded-2xl border border-sky/40 bg-sky/10 p-3 text-center text-sm text-sky">
+          Tu es éliminé. La partie continue —{" "}
+          <button
+            type="button"
+            onClick={() => setEliminatedMode("spectator")}
+            className="font-bold underline"
+          >
+            revenir suivre la partie
+          </button>
+        </div>
+        <TrainingQuizz />
+      </main>
+    );
+  }
 
   // Vague V (#7) — Pause de la partie : early return prioritaire (avant les
   // animations pré-duel) pour figer la vue jusqu'à `game:resumed`.
@@ -764,29 +815,33 @@ export function PlayDouzeCoupsView({
   }
 
   if (phase === "cpc-spectator" && cpcQuestion) {
-    // Vague V (#6 partiel) — Spectateurs voient le thème + les verts cumulés
-    // (lecture seule) pour suivre la progression du joueur courant.
+    // Vague X (#2) — Spectateurs en CPC ne voient PAS les 7 propositions
+    // (uniquement le joueur courant les voit sur son téléphone). On affiche
+    // juste le thème + le statut "[Pseudo] cherche l'intrus" + la progression
+    // (verts trouvés). Les propositions restent affichées sur la TV pour le
+    // public présent en physique.
     return (
-      <main className="flex min-h-screen flex-col gap-3 bg-background p-4">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center">
         <Header
           pseudo={cpcQuestion.currentPlayerPseudo}
           subtitle="cherche l'intrus"
         />
+        <Users className="h-12 w-12 text-foreground/40" aria-hidden="true" />
         <p className="rounded-xl border border-border bg-card p-3 text-center font-display text-base font-bold text-foreground">
           Thème : <span className="text-gold-warm">{cpcQuestion.enonce}</span>
         </p>
-        <p className="text-center text-xs text-foreground/60">
-          <strong>{cpcQuestion.currentPlayerPseudo}</strong> joue —{" "}
+        <p className="text-base text-foreground/70">
+          <strong className="text-foreground">
+            {cpcQuestion.currentPlayerPseudo}
+          </strong>{" "}
+          cherche l&apos;intrus…
+        </p>
+        <p className="text-sm text-foreground/60">
+          Propositions trouvées :{" "}
           <span className="font-bold text-life-green">
             {cpcFoundIndices.length}/{cpcQuestion.propositions.length - 1}
           </span>
         </p>
-        <CpcPropositions
-          propositions={cpcQuestion.propositions}
-          enabled={false}
-          onAnswer={() => {}}
-          foundIndices={cpcFoundIndices}
-        />
       </main>
     );
   }

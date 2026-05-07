@@ -100,6 +100,21 @@ export function transitionAfterElimination(
   s: TvDouzeCoupsState,
 ): TvDouzeCoupsState | null {
   const alive = s.players.filter((p) => !p.isEliminated);
+  // Vague X (#1, #4) — Logs pour diagnostiquer la transition de phase et le
+  // reset des vies. Affichés UNIQUEMENT côté navigateur (l'orchestrateur tourne
+  // côté client) — pas de pollution serveur.
+  if (typeof window !== "undefined") {
+    // eslint-disable-next-line no-console
+    console.log("[X1:transition] called", {
+      fromPhase: s.phase,
+      aliveCount: alive.length,
+      players: s.players.map((p) => ({
+        pseudo: p.pseudo,
+        lifeStatus: p.lifeStatus,
+        isEliminated: p.isEliminated,
+      })),
+    });
+  }
   if (
     (s.phase === "coup-envoi-playing" ||
       s.phase === "coup-envoi-elimination") &&
@@ -113,6 +128,17 @@ export function transitionAfterElimination(
     const playersReset = s.players.map((p) =>
       p.isEliminated ? p : { ...p, lifeStatus: "green" as const },
     );
+    if (typeof window !== "undefined") {
+      // eslint-disable-next-line no-console
+      console.log("[X1:transition] CE → CPC (lives reset)", {
+        playersAfterReset: playersReset.map((p) => ({
+          pseudo: p.pseudo,
+          lifeStatus: p.lifeStatus,
+          isEliminated: p.isEliminated,
+        })),
+        newTurnOrder,
+      });
+    }
     return {
       ...s,
       phase: "coup-par-coup-playing",
@@ -133,12 +159,25 @@ export function transitionAfterElimination(
       s.phase === "coup-par-coup-elimination") &&
     alive.length <= 2
   ) {
+    if (typeof window !== "undefined") {
+      // eslint-disable-next-line no-console
+      console.log("[X4:transition] CPC → FA", {
+        finalists: alive.map((p) => p.pseudo),
+      });
+    }
     return {
       ...s,
       phase: "face-a-face-vote",
       players: markFinalists(s.players),
       lastAnswerKey: null,
     };
+  }
+  if (typeof window !== "undefined") {
+    // eslint-disable-next-line no-console
+    console.log("[X1:transition] no transition (still in same phase)", {
+      phase: s.phase,
+      aliveCount: alive.length,
+    });
   }
   return null;
 }
@@ -225,6 +264,20 @@ export function applyAnswer(
   );
   const triggersDuel =
     player.lifeStatus !== "red" && updated.lifeStatus === "red";
+  // Vague X (#1) — Log applique à chaque réponse pour tracer la perte de vie.
+  // Visible uniquement navigateur (orchestrateur côté client).
+  if (typeof window !== "undefined") {
+    // eslint-disable-next-line no-console
+    console.log("[X1:applyAnswer]", {
+      kind,
+      playerPseudo: player.pseudo,
+      isCorrect,
+      lifeBefore: player.lifeStatus,
+      lifeAfter: updated.lifeStatus,
+      triggersDuel,
+      phase: s.phase,
+    });
+  }
 
   if (triggersDuel) {
     const duelPhase: TvGamePhase =
@@ -493,7 +546,15 @@ export function applyDuelThemeSelection(
   themeId: number,
   question: QuizzQuestion,
 ): TvDouzeCoupsState {
-  if (!s.currentDuel) return s;
+  if (!s.currentDuel) {
+    if (typeof window !== "undefined") {
+      // eslint-disable-next-line no-console
+      console.warn("[X3:applyDuelThemeSelection] no currentDuel — skipping", {
+        phase: s.phase,
+      });
+    }
+    return s;
+  }
   const isDuel1 = s.phase === "coup-envoi-duel-theme";
   const questionPhase: TvGamePhase = isDuel1
     ? "coup-envoi-duel-question"
@@ -504,6 +565,16 @@ export function applyDuelThemeSelection(
         chosenInDuel1: themeId,
       }
     : s.duelMemory ?? null;
+  if (typeof window !== "undefined") {
+    // eslint-disable-next-line no-console
+    console.log("[X3:applyDuelThemeSelection]", {
+      phase: s.phase,
+      isDuel1,
+      themeId,
+      previousMemory: s.duelMemory,
+      newMemory: newDuelMemory,
+    });
+  }
   return {
     ...s,
     phase: questionPhase,
@@ -553,11 +624,35 @@ export function applyDuelAnswer(
   const elimDuration = options.eliminationDurationMs ?? 4500;
 
   const duel = s.currentDuel;
-  if (!duel || !duel.question) return { kind: "rejected", reason: "no-duel" };
+  if (!duel || !duel.question) {
+    if (typeof window !== "undefined") {
+      // eslint-disable-next-line no-console
+      console.log("[X4:applyDuelAnswer] REJECTED no-duel", {
+        hasDuel: !!duel,
+        hasQuestion: !!duel?.question,
+        phase: s.phase,
+      });
+    }
+    return { kind: "rejected", reason: "no-duel" };
+  }
   if (duel.question.id !== payload.questionId) {
+    if (typeof window !== "undefined") {
+      // eslint-disable-next-line no-console
+      console.log("[X4:applyDuelAnswer] REJECTED wrong-question", {
+        expected: duel.question.id,
+        received: payload.questionId,
+      });
+    }
     return { kind: "rejected", reason: "wrong-question" };
   }
   if (payload.candidateToken !== duel.candidateToken) {
+    if (typeof window !== "undefined") {
+      // eslint-disable-next-line no-console
+      console.log("[X4:applyDuelAnswer] REJECTED wrong-candidate", {
+        expected: duel.candidateToken,
+        received: payload.candidateToken,
+      });
+    }
     return { kind: "rejected", reason: "wrong-candidate" };
   }
   if (duel.candidateToken === null) {
@@ -566,6 +661,12 @@ export function applyDuelAnswer(
   // Vague V (#1) — Idempotence sur le duel : même cle (questionId+candidate+chosenIdx).
   const duelAnswerKey = `duel:${payload.questionId}:${payload.candidateToken}:${payload.chosenIdx}`;
   if (s.lastAnswerKey === duelAnswerKey) {
+    if (typeof window !== "undefined") {
+      // eslint-disable-next-line no-console
+      console.log("[X4:applyDuelAnswer] REJECTED duplicate", {
+        key: duelAnswerKey,
+      });
+    }
     return { kind: "rejected", reason: "duplicate" };
   }
 
@@ -587,6 +688,19 @@ export function applyDuelAnswer(
     (p) => p.token === duel.challengerToken && p.isEliminated,
   );
   const challengerEliminated = !!eliminatedPlayer;
+  // Vague X (#4) — Log entry de applyDuelAnswer pour traçabilité du flow
+  // duel-result → elimination → transition. Visible uniquement navigateur.
+  if (typeof window !== "undefined") {
+    // eslint-disable-next-line no-console
+    console.log("[X4:applyDuelAnswer] result", {
+      candidateCorrect,
+      challengerEliminated,
+      challengerToken: duel.challengerToken,
+      candidateToken: duel.candidateToken,
+      phaseKind,
+      aliveAfter: playersAfter.filter((p) => !p.isEliminated).length,
+    });
+  }
 
   if (challengerEliminated && eliminatedPlayer) {
     const elimPhase: TvGamePhase =

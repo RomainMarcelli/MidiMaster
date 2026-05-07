@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { SkipForward, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -56,6 +56,8 @@ import { PlayerTurnsRedAnimation } from "@/components/tv/PlayerTurnsRedAnimation
 import { PlayerTurnsOrangeAnimation } from "@/components/tv/PlayerTurnsOrangeAnimation";
 import { DuelAnnouncementAnimation } from "@/components/tv/DuelAnnouncementAnimation";
 import { PlayerLeftModal } from "@/components/tv/PlayerLeftModal";
+import { DebugOverlay } from "@/components/tv/DebugOverlay";
+import { AnswerReveal } from "@/components/tv/AnswerReveal";
 import { prepareFaceAFace } from "@/lib/realtime/face-a-face-actions";
 import type { FaceAFaceState } from "@/lib/realtime/face-a-face-state";
 import { TvFaceAFaceView } from "./tv-face-a-face-view";
@@ -85,7 +87,16 @@ import {
  * (pour reconnexion / debug).
  */
 const ELIM_ANIM_MS = 4500;
-const RESULT_DELAY_MS = 2500;
+// Vague X (bonus) — Délai de lecture du résultat avant question suivante.
+// 5s si la question a une explication BDD (laisser le temps de lire),
+// 3s sinon. Avant : 2.5s fixe.
+const RESULT_DELAY_LONG_MS = 5000;
+const RESULT_DELAY_SHORT_MS = 3000;
+function pickResultDelayMs(explication: string | null | undefined): number {
+  return explication && explication.trim().length > 0
+    ? RESULT_DELAY_LONG_MS
+    : RESULT_DELAY_SHORT_MS;
+}
 // Vague V (#3) — Durées des 2 animations cinématiques d'introduction du duel.
 const RED_ANIM_MS = 3000;
 const DUEL_ANNOUNCE_MS = 3000;
@@ -132,6 +143,17 @@ export function TvDouzeCoupsHost({
   const [orangeAnim, setOrangeAnim] = useState<{
     pseudo: string;
     avatarUrl: string | null;
+  } | null>(null);
+  // Vague X (bonus) — Bannière TV "bonne réponse / mauvaise réponse + explication"
+  // pendant le délai d'affichage. Sert à annoncer la réponse correcte aux
+  // spectateurs présents physiquement devant la TV.
+  const [tvReveal, setTvReveal] = useState<{
+    isCorrect: boolean;
+    correctText: string;
+    chosenText: string | null;
+    explication: string | null;
+    byPseudo: string;
+    cpcMode: boolean;
   } | null>(null);
   // Vague V (#7) — Action en cours dans le modal "joueur a quitté".
   // Sert à afficher un loader sur le bouton cliqué + bloquer les autres.
@@ -207,6 +229,8 @@ export function TvDouzeCoupsHost({
     if (!currentPlayer) return;
     const q = s.currentQuestion;
     if (!q) return;
+    // Vague X (bonus) — Nouvelle question = clear de la bannière TV reveal.
+    setTvReveal(null);
 
     if (s.phase === "coup-envoi-playing" && isQuizzQuestion(q)) {
       ch.send("ce:question-show", {
@@ -359,7 +383,7 @@ export function TvDouzeCoupsHost({
   // ============================================================
   // Coup d'Envoi : single-shot Q/R, vie-1 si mauvaise.
   //  - si vie passe rouge : démarre un duel
-  //  - sinon : avance au tour suivant après RESULT_DELAY_MS
+  //  - sinon : avance au tour suivant après pickResultDelayMs(explication)
   // ============================================================
   const handleCeAnswer = useCallback(
     (payload: { questionId: string; chosenIdx: number; playerToken: string }) => {
@@ -367,6 +391,13 @@ export function TvDouzeCoupsHost({
       if (!ch) return;
       // Vague V (#7) — Ignore les events entrants pendant la pause.
       if (stateRef.current.pausedReason) return;
+      // Vague X (#1) — Capture le `before` AVANT applyAnswer + updateAndSave qui
+      // mutent stateRef.current. Sinon `before` et `after` sont identiques (le
+      // ref a déjà été remplacé par `next`) et la détection green→orange ne
+      // fire jamais. Bug latent introduit en W9.
+      const beforePlayer = stateRef.current.players.find(
+        (p) => p.token === payload.playerToken,
+      );
       const result = applyAnswer(stateRef.current, payload, "ce");
       if (result.kind !== "accepted") return;
       const { isCorrect, correctIdx, next, triggersDuel, challengerPseudo } = result;
@@ -385,6 +416,24 @@ export function TvDouzeCoupsHost({
         explication: ceExplication,
       });
 
+      // Vague X (bonus) — Bannière TV pendant le délai de lecture.
+      if (isQuizzQuestion(ceQuestion)) {
+        const correctChoice = ceQuestion.choices.find(
+          (c) => c.idx === correctIdx,
+        );
+        const chosenChoice = ceQuestion.choices.find(
+          (c) => c.idx === payload.chosenIdx,
+        );
+        setTvReveal({
+          isCorrect,
+          correctText: correctChoice?.text ?? "",
+          chosenText: chosenChoice?.text ?? null,
+          explication: ceExplication,
+          byPseudo: beforePlayer?.pseudo ?? "?",
+          cpcMode: false,
+        });
+      }
+
       updateAndSave(() => next);
 
       if (triggersDuel) {
@@ -397,9 +446,8 @@ export function TvDouzeCoupsHost({
       } else {
         // Vague W (#9) — Détection passage green→orange (1ère erreur).
         // Si oui, animation 3s plein écran avant l'advance turn.
-        const before = stateRef.current.players.find(
-          (p) => p.token === payload.playerToken,
-        );
+        // Vague X (#1) — `before` capturé en début de handler (cf. ci-dessus).
+        const before = beforePlayer;
         const after = next.players.find((p) => p.token === payload.playerToken);
         const turnsOrange =
           before?.lifeStatus === "green" && after?.lifeStatus === "orange";
@@ -420,12 +468,13 @@ export function TvDouzeCoupsHost({
           }, ORANGE_ANIM_MS);
         } else {
           window.setTimeout(() => {
+            setTvReveal(null);
             updateAndSave((prev) => {
               const advanced = advanceTurn(prev);
               window.setTimeout(() => broadcastCurrent(advanced), 0);
               return advanced;
             });
-          }, RESULT_DELAY_MS);
+          }, pickResultDelayMs(ceExplication));
         }
       }
     },
@@ -451,6 +500,11 @@ export function TvDouzeCoupsHost({
       if (!ch) return;
       // Vague V (#7) — Ignore les events entrants pendant la pause.
       if (stateRef.current.pausedReason) return;
+      // Vague X (#1) — Capture le `before` AVANT applyCpcAnswer + updateAndSave
+      // (sinon stateRef.current est déjà muté). Cf. handleCeAnswer.
+      const beforePlayerCpc = stateRef.current.players.find(
+        (p) => p.token === payload.playerToken,
+      );
       const result = applyCpcAnswer(stateRef.current, payload);
       if (result.kind === "rejected") return;
 
@@ -479,6 +533,20 @@ export function TvDouzeCoupsHost({
           isCorrect: true,
           explication: cpcExplCorrect,
         });
+        // Vague X (bonus) — Bannière TV "bonne réponse" + explication.
+        if (isCpcQuestion(cpcQ)) {
+          const chosenProp = cpcQ.propositions.find(
+            (p) => p.idx === payload.chosenIdx,
+          );
+          setTvReveal({
+            isCorrect: true,
+            correctText: chosenProp?.text ?? "",
+            chosenText: chosenProp?.text ?? null,
+            explication: cpcExplCorrect,
+            byPseudo: beforePlayerCpc?.pseudo ?? "?",
+            cpcMode: true,
+          });
+        }
         // 3. Après délai d'affichage : advance idx (même question, foundIndices
         //    conservé côté téléphone car questionId inchangé) + re-broadcast.
         window.setTimeout(() => {
@@ -496,7 +564,7 @@ export function TvDouzeCoupsHost({
             window.setTimeout(() => broadcastCurrent(advanced), 0);
             return advanced;
           });
-        }, RESULT_DELAY_MS);
+        }, pickResultDelayMs(cpcExplCorrect));
         return;
       }
 
@@ -540,6 +608,23 @@ export function TvDouzeCoupsHost({
         isCorrect: false,
         explication: cpcExplWrong,
       });
+      // Vague X (bonus) — Bannière TV "mauvaise réponse" + intrus + explication.
+      if (isCpcQuestion(cpcQWrong)) {
+        const intrusProp = cpcQWrong.propositions.find(
+          (p) => p.idx === result.intrusIdx,
+        );
+        const chosenProp = cpcQWrong.propositions.find(
+          (p) => p.idx === payload.chosenIdx,
+        );
+        setTvReveal({
+          isCorrect: false,
+          correctText: intrusProp?.text ?? "",
+          chosenText: chosenProp?.text ?? null,
+          explication: cpcExplWrong,
+          byPseudo: beforePlayerCpc?.pseudo ?? "?",
+          cpcMode: true,
+        });
+      }
 
       if (result.triggersDuel) {
         // Vague V (#3) — Séquence cinématique 6s avant le `ce:duel-start`.
@@ -550,9 +635,9 @@ export function TvDouzeCoupsHost({
         );
       } else {
         // Vague W (#9) — Détection passage green→orange en CPC (1ère erreur).
-        const beforeCpc = stateRef.current.players.find(
-          (p) => p.token === payload.playerToken,
-        );
+        // Vague X (#1) — `beforeCpc` capturé en début de handler (sinon le ref
+        // est déjà muté par updateAndSave et before === after).
+        const beforeCpc = beforePlayerCpc;
         const afterCpc = result.next.players.find(
           (p) => p.token === payload.playerToken,
         );
@@ -583,7 +668,7 @@ export function TvDouzeCoupsHost({
               window.setTimeout(() => broadcastCurrent(advanced), 0);
               return advanced;
             });
-          }, RESULT_DELAY_MS);
+          }, pickResultDelayMs(cpcExplWrong));
         }
       }
     },
@@ -756,14 +841,17 @@ export function TvDouzeCoupsHost({
           window.setTimeout(() => broadcastCurrent(stateRef.current), 0);
         }, ELIM_ANIM_MS);
       } else {
-        // Le challenger survit, retour direct au tour suivant après le délai
+        // Le challenger survit, retour direct au tour suivant après le délai.
+        // Vague X (bonus) — Délai variable selon présence d'explication.
+        const duelExpl = stateRef.current.currentDuel?.question?.explication
+          ?? null;
         window.setTimeout(() => {
           updateAndSave((prev) => {
             const advanced = advanceTurn(prev);
             window.setTimeout(() => broadcastCurrent(advanced), 0);
             return advanced;
           });
-        }, RESULT_DELAY_MS);
+        }, pickResultDelayMs(duelExpl));
       }
     },
     [updateAndSave, broadcastCurrent],
@@ -1336,6 +1424,35 @@ export function TvDouzeCoupsHost({
         )}
       </AnimatePresence>
 
+      {/* Vague X (bonus) — Bannière TV qui annonce la bonne / mauvaise
+          réponse + l'explication aux spectateurs. Affichée pendant le délai
+          de lecture (3s sans expli, 5s avec). Auto clear quand
+          broadcastCurrent fire pour la question suivante. */}
+      <AnimatePresence>
+        {tvReveal && !inDuel && !showEliminationOverlay && (
+          <motion.div
+            key="tv-reveal"
+            initial={{ opacity: 0, y: 32 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 32 }}
+            transition={{ duration: 0.25 }}
+            className="pointer-events-none fixed inset-x-0 bottom-6 z-30 mx-auto flex justify-center px-6"
+          >
+            <div className="pointer-events-auto w-full max-w-3xl text-lg lg:text-xl">
+              <AnswerReveal
+                isCorrect={tvReveal.isCorrect}
+                isMine={false}
+                correctText={tvReveal.correctText}
+                chosenText={tvReveal.chosenText ?? null}
+                explication={tvReveal.explication ?? null}
+                byPseudo={tvReveal.byPseudo}
+                cpcMode={tvReveal.cpcMode}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <EliminationOverlay
         visible={showEliminationOverlay && !!eliminatedPlayer}
         pseudo={eliminatedPlayer?.pseudo ?? ""}
@@ -1397,6 +1514,10 @@ export function TvDouzeCoupsHost({
         confirmLabel={ending ? "Fermeture…" : "Mettre fin"}
         confirmVariant="danger"
       />
+
+      {/* Vague X (#5) — Overlay debug activable via `?debug=1` dans l'URL.
+          Caché par défaut. Voir DebugOverlay.tsx pour les infos affichées. */}
+      <DebugOverlay state={state} />
     </main>
   );
 }

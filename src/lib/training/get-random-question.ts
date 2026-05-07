@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { parseQuizzAnswers } from "@/lib/realtime/tv-actions-helpers";
 
 /**
@@ -13,6 +13,13 @@ import { parseQuizzAnswers } from "@/lib/realtime/tv-actions-helpers";
  *
  * On ne tire que des `quizz_2` et `quizz_4` (pas de `coup_par_coup` qui
  * a une mecanique speciale a 7 propositions).
+ *
+ * Vague X (#9) — Utilise le client admin (service_role) pour bypasser
+ * la RLS `questions_select_auth`. Les joueurs guests qui rejoignent une
+ * room TV ne sont PAS authentifies (pas de cookie supabase) -> sans
+ * service_role, count() renvoie 0 (RLS masque tout) et la function
+ * throw "No training questions available in BDD". Lecture seule,
+ * pas de risque securite.
  */
 export interface TrainingQuestion {
   id: string;
@@ -34,16 +41,20 @@ const ALLOWED_TYPES = ["quizz_2", "quizz_4"] as const;
  * caller (cf. `<TrainingQuizz />`) attrape et retry apres 2s.
  */
 export async function getRandomTrainingQuestion(): Promise<TrainingQuestion> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { count, error: countError } = await supabase
     .from("questions")
     .select("*", { count: "exact", head: true })
     .in("type", ALLOWED_TYPES);
   if (countError) {
+    // eslint-disable-next-line no-console
+    console.error("[X9:training] count error", countError);
     throw new Error(`Failed to count training questions: ${countError.message}`);
   }
   const total = count ?? 0;
+  // eslint-disable-next-line no-console
+  console.log("[X9:training] count result", { total });
   if (total === 0) {
     throw new Error("No training questions available in BDD");
   }
@@ -56,6 +67,8 @@ export async function getRandomTrainingQuestion(): Promise<TrainingQuestion> {
     .range(offset, offset)
     .single();
   if (error || !data) {
+    // eslint-disable-next-line no-console
+    console.error("[X9:training] fetch error", { offset, error });
     throw new Error(
       `Failed to fetch training question at offset ${offset}: ${error?.message}`,
     );

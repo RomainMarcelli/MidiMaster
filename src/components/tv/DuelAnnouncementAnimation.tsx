@@ -10,6 +10,9 @@ import { Swords } from "lucide-react";
  * `<PlayerTurnsRedAnimation />`, et AVANT la page de choix de candidat.
  *
  * Composant purement présentationnel — démonté par le caller après 3s.
+ *
+ * Vague X (#8) — "DUEL" passe du gold au rouge (`text-buzz`) pour cohérence
+ * avec "Qui dit rouge dit ...". Les épées et le halo passent aussi en rouge.
  */
 export function DuelAnnouncementAnimation() {
   return (
@@ -25,7 +28,7 @@ export function DuelAnnouncementAnimation() {
       {[0, 1, 2].map((i) => (
         <motion.div
           key={i}
-          className="absolute h-96 w-96 rounded-full bg-gold/20 blur-3xl"
+          className="absolute h-96 w-96 rounded-full bg-buzz/25 blur-3xl"
           animate={{
             scale: [0, 2, 0],
             opacity: [0, 0.6, 0],
@@ -62,23 +65,23 @@ export function DuelAnnouncementAnimation() {
           delay: 0.6,
         }}
       >
-        <Swords className="h-24 w-24 text-gold" aria-hidden="true" />
+        <Swords className="h-24 w-24 text-buzz" aria-hidden="true" />
         <h1
-          className="font-display text-9xl font-black tracking-tight text-gold"
-          style={{ textShadow: "0 0 80px rgba(245,197,24,0.8)" }}
+          className="font-display text-9xl font-black tracking-tight text-buzz"
+          style={{ textShadow: "0 0 80px rgba(230,57,70,0.85)" }}
         >
           DUEL
         </h1>
-        <Swords className="h-24 w-24 -scale-x-100 text-gold" aria-hidden="true" />
+        <Swords className="h-24 w-24 -scale-x-100 text-buzz" aria-hidden="true" />
       </motion.div>
 
       <motion.div
         className="pointer-events-none absolute inset-0"
         animate={{
           background: [
-            "radial-gradient(circle at center, rgba(245,197,24,0.2) 0%, transparent 50%)",
-            "radial-gradient(circle at center, rgba(245,197,24,0.4) 0%, transparent 50%)",
-            "radial-gradient(circle at center, rgba(245,197,24,0.2) 0%, transparent 50%)",
+            "radial-gradient(circle at center, rgba(230,57,70,0.22) 0%, transparent 50%)",
+            "radial-gradient(circle at center, rgba(230,57,70,0.45) 0%, transparent 50%)",
+            "radial-gradient(circle at center, rgba(230,57,70,0.22) 0%, transparent 50%)",
           ],
         }}
         transition={{ duration: 1.5, repeat: Infinity, delay: 1 }}

@@ -367,9 +367,10 @@ export function TvHostRoom({
           <p className="text-[10px] font-bold uppercase tracking-widest text-gold-warm">
             Pour rejoindre
           </p>
-          {/* Vague W (#7) — QR cliquable → ouverture en plein écran. La
-              taille augmente aussi de 180→220 pour mieux remplir la
-              colonne et faciliter le scan à distance. */}
+          {/* Vague X (#6) — QR plus grand (320px vs 220px W7) pour combler
+              l'espace sous les boutons "Copier le lien / Partager" et
+              améliorer le scan à distance. Toujours cliquable pour ouvrir
+              en plein écran. */}
           {joinUrl ? (
             <button
               type="button"
@@ -379,7 +380,7 @@ export function TvHostRoom({
             >
               <QRCodeSVG
                 value={joinUrl}
-                size={220}
+                size={320}
                 level="M"
                 includeMargin={false}
               />
@@ -389,7 +390,7 @@ export function TvHostRoom({
               </span>
             </button>
           ) : (
-            <div className="flex h-[220px] w-[220px] items-center justify-center rounded-xl bg-card">
+            <div className="flex h-[320px] w-[320px] items-center justify-center rounded-xl bg-card">
               <Loader2 className="h-8 w-8 animate-spin text-gold-warm" aria-hidden="true" />
             </div>
           )}

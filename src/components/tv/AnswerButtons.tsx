@@ -161,7 +161,9 @@ function stateClasses(state: AnswerState): string {
       return "border-gold bg-gold/10 shadow-[0_4px_16px_rgba(245,183,0,0.3)]";
     case "idle":
     default:
-      return "border-navy/25 bg-cream hover:border-navy/60 shadow-md hover:shadow-lg";
+      // Vague X (bonus) — hover passe en bordure gold (DA cohérence) :
+      // navy/20 idle → gold hover, lettre reste navy.
+      return "border-navy/20 bg-cream hover:border-gold shadow-md hover:shadow-lg";
   }
 }
 
