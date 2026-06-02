@@ -57,6 +57,15 @@ interface QuizPlayerProps {
    * toutes les questions sont favorites par définition).
    */
   favoriteIds?: ReadonlySet<string>;
+  /**
+   * Affiche un bouton "Re-tirer la liste" sur la 1ère question uniquement
+   * (tant que l'utilisateur n'a pas répondu). Pratique en Marathon libre
+   * pour relancer un tirage si la première question tombée a déjà été vue
+   * dans une session récente.
+   */
+  onReshuffle?: () => void;
+  /** Si true, le bouton "Re-tirer" est en cours de chargement (disabled + label). */
+  isReshuffling?: boolean;
 }
 
 type Phase =
@@ -69,6 +78,8 @@ export function QuizPlayer({
   trackWrong = true,
   removeOnCorrect = false,
   favoriteIds,
+  onReshuffle,
+  isReshuffling = false,
 }: QuizPlayerProps) {
   // I1.5 — Fallback sur le contexte si la prop n'est pas passée. Permet
   // aux modes (Marathon, Apprendre…) de bénéficier des étoiles remplies
@@ -128,6 +139,8 @@ export function QuizPlayer({
       trackWrong={trackWrong}
       removeOnCorrect={removeOnCorrect}
       isFavorite={effectiveFavoriteIds.has(q.questionId)}
+      onReshuffle={phase.idx === 0 ? onReshuffle : undefined}
+      isReshuffling={isReshuffling}
       onCorrectForReview={(questionId) => {
         // I1.3 + J1.2 — Bonne réponse en mode Refaire : on stocke dans
         // la file partagée (au niveau RevisionClient). Pas de DELETE
@@ -166,6 +179,8 @@ function PlayCard({
   isFavorite,
   onCorrectForReview,
   onDone,
+  onReshuffle,
+  isReshuffling = false,
 }: {
   question: RevQuestion;
   index: number;
@@ -181,6 +196,9 @@ function PlayCard({
    */
   onCorrectForReview: (questionId: string) => void;
   onDone: (isCorrect: boolean) => void;
+  /** Présent uniquement sur la 1ère question si le parent veut autoriser un retirage. */
+  onReshuffle?: () => void;
+  isReshuffling?: boolean;
 }) {
   const [feedback, setFeedback] = useState<
     | null
@@ -284,6 +302,20 @@ function PlayCard({
             style={{ width: `${progress}%` }}
           />
         </div>
+        {onReshuffle && !feedback && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onReshuffle}
+            disabled={isReshuffling}
+            className="shrink-0 text-xs"
+            title="Tirer une nouvelle liste de questions"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", isReshuffling && "animate-spin")} aria-hidden="true" />
+            {isReshuffling ? "Tirage…" : "Re-tirer"}
+          </Button>
+        )}
       </div>
 
       {/* Meta */}
