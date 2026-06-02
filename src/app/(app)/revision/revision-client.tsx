@@ -645,7 +645,21 @@ function MarathonLibreMode() {
   }
 
   if (questions) {
-    return <QuizPlayer questions={questions} trackWrong />;
+    return (
+      <QuizPlayer
+        questions={questions}
+        trackWrong
+        isReshuffling={isPending}
+        onReshuffle={() => {
+          // Re-tirage à la Q1 : on relance fetchQuestionsForRevision avec
+          // les mêmes paramètres. Comme le pool éligible exclut désormais
+          // les IDs récents (pushRecentIds vient d'être appelé au tirage
+          // précédent), on évite naturellement de retomber sur la liste
+          // qu'on vient de jeter.
+          start();
+        }}
+      />
+    );
   }
 
   return (

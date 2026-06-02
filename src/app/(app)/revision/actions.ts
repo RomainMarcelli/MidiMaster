@@ -216,44 +216,45 @@ export async function fetchQuestionsForRevision(
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  let query = supabase
-    .from("questions")
-    .select(
-      "id, type, category_id, difficulte, enonce, reponses, bonne_reponse, alias, explication",
-    );
-  if (input.categoryIds.length > 0)
-    query = query.in("category_id", input.categoryIds);
-  if (input.difficulties.length > 0)
-    query = query.in("difficulte", input.difficulties);
-  if (input.types.length > 0) query = query.in("type", input.types);
+  // Migration 0023 — Tirage aléatoire fait côté Postgres via la RPC
+  // `random_questions` (ORDER BY random() sur le pool filtré complet).
+  // Avant : `.limit(oversample)` sans ORDER BY renvoyait toujours les N
+  // mêmes premières lignes (ordre physique), puis on shufflait côté JS.
+  // Avec 250 IDs récents exclus, il restait toujours ~le même petit pool
+  // → impression que "ce sont toujours les mêmes questions".
+  //
+  // `Database.Functions` est vide (RPC pas dans les types générés) → on
+  // cast le client pour appeler la fonction Postgres manuellement.
+  const rpcPromise = (
+    supabase as unknown as {
+      rpc: (
+        name: string,
+        params: Record<string, unknown>,
+      ) => Promise<{ data: RawQuestion[] | null; error: { message: string } | null }>;
+    }
+  ).rpc("random_questions", {
+    p_category_ids: input.categoryIds.length > 0 ? input.categoryIds : null,
+    p_difficulties: input.difficulties.length > 0 ? input.difficulties : null,
+    p_types: input.types.length > 0 ? input.types : null,
+    p_count: Math.max(1, input.count),
+    p_exclude_ids:
+      input.excludeQuestionIds && input.excludeQuestionIds.length > 0
+        ? input.excludeQuestionIds
+        : null,
+  });
 
-  // J1.5 — On élargit volontairement l'oversample (×6 au lieu de ×4)
-  // pour avoir plus de marge après exclusion des récents et garder un
-  // bon spread par catégorie.
-  const oversample = Math.max(input.count * 6, 80);
-  query = query.limit(oversample);
-
-  const [{ data: qs, error }, { data: cats }] = await Promise.all([
-    query,
+  const [{ data: rpcRows, error }, { data: cats }] = await Promise.all([
+    rpcPromise,
     supabase.from("categories").select("id, nom, couleur"),
   ]);
   if (error) return { status: "error", message: error.message };
 
   const catsById = new Map((cats ?? []).map((c) => [c.id, c] as const));
-
-  const all = (qs ?? []).map((q) => normalizeQuestion(q, catsById));
-  // J1.5 — Filtre les IDs récemment vus si le pool reste assez grand
-  // après exclusion. Si trop d'exclusions vidaient le pool, on
-  // retombe sur le pool complet.
-  const excludeSet = new Set(input.excludeQuestionIds ?? []);
-  const filtered = all.filter((q) => !excludeSet.has(q.questionId));
-  const eligible =
-    filtered.length >= Math.max(input.count, 1) ? filtered : all;
-  const shuffled = shuffleArray(eligible).slice(0, Math.max(1, input.count));
+  const all = (rpcRows ?? []).map((q) => normalizeQuestion(q, catsById));
   // F1.3 — Anti-répétition de catégories (3 questions d'écart minimum).
   // Skip auto si pool < 2 catégories distinctes (cas du mode mono-cat).
   const spread = spreadByCategoryWithGetter(
-    shuffled,
+    all,
     (q) => q.category?.id ?? null,
     3,
   );
