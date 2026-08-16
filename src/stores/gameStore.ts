@@ -8,6 +8,9 @@ import {
 } from "@/lib/game-logic/jeu1";
 import type { LifeState } from "@/components/game/LifeBar";
 
+
+// HOLA
+
 export type GameMode =
   | "jeu1"
   | "coup_par_coup"
